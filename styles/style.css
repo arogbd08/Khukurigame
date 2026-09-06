@@ -1,0 +1,6 @@
+html,body{margin:0;height:100%;background:#0e0b08;display:flex;align-items:center;
+  justify-content:center;font-family:'Segoe UI',system-ui,sans-serif;color:#e8d9b5;overflow:hidden}
+#wrap{text-align:center}
+canvas{background:#211810;border:3px solid #5a4632;border-radius:8px;display:block}
+p{margin:10px 0 0;font-size:12px;opacity:.7;letter-spacing:.3px}
+b{color:#e0b060}
