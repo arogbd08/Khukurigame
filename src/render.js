@@ -1,5 +1,5 @@
 import {ctx} from './canvas.js';
-import {W, H, GROUND, WORLD, PARRY_ACTIVE, MOVES, COMBO_GAP} from './config.js';
+import {W, H, GROUND, WORLD, PARRY_ACTIVE, MOVES, COMBO_GAP, DEATHBLOW_FRAMES} from './config.js';
 import {state, sub, sparks, toasts, diff} from './state.js';
 import {player, plats, boss, cage, cs} from './entities.js';
 
@@ -272,35 +272,70 @@ function limb2(rx,ry,tx,ty,l1,l2,bend,w,col,capCol,capR){
 const BLADE_LEN=42;
 function katanaBlade(s){
   s=s||1; const L=BLADE_LEN*s;
-  // tsuka (handle) with ito diamond wrap
-  ctx.fillStyle='#1d2126'; ctx.fillRect(-16*s,-2.3*s,14*s,4.6*s);
-  ctx.strokeStyle='#0b0d10'; ctx.lineWidth=0.8*s;
-  for(let i=0;i<4;i++){ const hx=-15*s+i*3.4*s;
-    ctx.beginPath(); ctx.moveTo(hx,-2.3*s); ctx.lineTo(hx+2*s,2.3*s);
-    ctx.moveTo(hx+2*s,-2.3*s); ctx.lineTo(hx,2.3*s); ctx.stroke(); }
-  ctx.fillStyle='#3a3f47'; ctx.fillRect(-17*s,-2.6*s,2*s,5.2*s);   // kashira (pommel)
-  // tsuba (oval guard)
-  ctx.fillStyle='#2b2f36'; ctx.beginPath(); ctx.ellipse(-1*s,0,2.3*s,4.7*s,0,0,7); ctx.fill();
-  ctx.fillStyle='#565c66'; ctx.beginPath(); ctx.ellipse(-1*s,0,1.2*s,3.3*s,0,0,7); ctx.fill();
+  // tsuka (handle): black with RED diamond ito wrap + gold fittings (ref image)
+  ctx.fillStyle='#141619'; ctx.fillRect(-16*s,-2.3*s,14*s,4.6*s);
+  ctx.fillStyle='#b8302a';
+  for(let i=0;i<4;i++){ const cx=-14.5*s+i*3.4*s;   // red wrap diamonds
+    ctx.beginPath(); ctx.moveTo(cx,0); ctx.lineTo(cx+1.5*s,-1.6*s); ctx.lineTo(cx+3*s,0); ctx.lineTo(cx+1.5*s,1.6*s); ctx.closePath(); ctx.fill(); }
+  ctx.fillStyle='#caa84e'; ctx.fillRect(-17*s,-2.6*s,2.2*s,5.2*s);    // kashira (gold pommel)
+  ctx.fillStyle='#caa84e'; ctx.fillRect(-3*s,-2.7*s,2*s,5.4*s);       // fuchi (gold collar)
+  // tsuba (gold oval guard)
+  ctx.fillStyle='#caa84e'; ctx.beginPath(); ctx.ellipse(-0.6*s,0,2.4*s,4.8*s,0,0,7); ctx.fill();
+  ctx.fillStyle='#8a6f28'; ctx.beginPath(); ctx.ellipse(-0.6*s,0,1.2*s,3.2*s,0,0,7); ctx.fill();
+  ctx.fillStyle='#e6c869'; ctx.fillRect(1*s,-1.6*s,2*s,3.2*s);        // habaki (gold blade collar)
   // blade — one gentle sori curve, chisel kissaki
   const g=ctx.createLinearGradient(0,-3*s,0,3*s);
-  g.addColorStop(0,'#f5f8fc'); g.addColorStop(0.5,'#d7dee8'); g.addColorStop(1,'#adb6c3');
+  g.addColorStop(0,'#f6f9fd'); g.addColorStop(0.5,'#d7dee8'); g.addColorStop(1,'#a9b3c1');
   ctx.fillStyle=g;
   ctx.beginPath();
-  ctx.moveTo(1*s,-2.1*s);                               // mune (back) at guard
-  ctx.quadraticCurveTo(L*0.55,-2.9*s, L*0.95,-1.5*s);   // gentle back curve
-  ctx.lineTo(L,-0.1*s);                                 // kissaki tip
-  ctx.lineTo(L*0.9, 1.1*s);
-  ctx.quadraticCurveTo(L*0.55, 1.9*s, 1*s, 1.9*s);      // ha (edge)
+  ctx.moveTo(3*s,-2.1*s);
+  ctx.quadraticCurveTo(L*0.55,-2.9*s, L*0.95,-1.5*s);
+  ctx.lineTo(L,-0.1*s); ctx.lineTo(L*0.9, 1.1*s);
+  ctx.quadraticCurveTo(L*0.55, 1.9*s, 3*s, 1.9*s);
   ctx.closePath(); ctx.fill();
-  // hamon temper line
-  ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.lineWidth=0.8*s;
-  ctx.beginPath(); ctx.moveTo(3*s,0.9*s); ctx.quadraticCurveTo(L*0.55,1.4*s,L*0.9,0.1*s); ctx.stroke();
-  // yokote (tip boundary) + spine glint
+  // hamon (wavy temper line)
+  ctx.strokeStyle='rgba(255,255,255,0.55)'; ctx.lineWidth=0.8*s;
+  ctx.beginPath(); ctx.moveTo(5*s,0.9*s);
+  for(let x=0.1;x<=0.9;x+=0.2) ctx.quadraticCurveTo(L*(x+0.05),1.6*s,L*(x+0.1),0.6*s);
+  ctx.stroke();
+  // yokote + spine glint
   ctx.strokeStyle='rgba(120,130,145,0.85)'; ctx.lineWidth=0.7*s;
   ctx.beginPath(); ctx.moveTo(L*0.86,-1.4*s); ctx.lineTo(L*0.88,1.0*s); ctx.stroke();
-  ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.lineWidth=0.6*s;
+  ctx.strokeStyle='rgba(255,255,255,0.9)'; ctx.lineWidth=0.6*s;
   ctx.beginPath(); ctx.moveTo(L*0.1,-1.3*s); ctx.lineTo(L*0.84,-1.15*s); ctx.stroke();
+}
+
+/* KHUKURI (Hari's main blade — ref image): brown wooden handle behind the origin,
+   a metal bolster, then a forward-DROOPING blade with the signature heavy belly
+   that widens toward a down-curved tip, an inner edge bevel line, and the cho notch. */
+const KH_LEN=34;
+function khukuriBlade(s){
+  s=s||1; const L=KH_LEN*s;
+  // wooden handle
+  ctx.fillStyle='#6b4526'; ctx.fillRect(-14*s,-2.6*s,11*s,5.2*s);
+  ctx.fillStyle='#7d5430'; ctx.fillRect(-14*s,-2.6*s,11*s,1.4*s);        // top highlight
+  ctx.fillStyle='#3a2414'; ctx.beginPath(); ctx.arc(-14*s,0,1.6*s,0,7); ctx.fill();   // butt cap
+  ctx.fillStyle='#c9cdd4'; ctx.fillRect(-3.5*s,-2.8*s,2.4*s,5.6*s);      // metal bolster/collar
+  // blade — drooping forward, heavy belly (edge on the lower/concave side)
+  const g=ctx.createLinearGradient(0,-4*s,0,10*s);
+  g.addColorStop(0,'#eef2f7'); g.addColorStop(0.55,'#cdd4de'); g.addColorStop(1,'#aab3bf');
+  ctx.fillStyle=g;
+  ctx.beginPath();
+  ctx.moveTo(-1*s,-2.6*s);                                  // spine at bolster
+  ctx.quadraticCurveTo(L*0.5,-4.4*s, L*0.86,-1.0*s);        // spine rises then curves down
+  ctx.quadraticCurveTo(L*1.02, 1.8*s, L*0.9, 4.6*s);        // down-curved tip
+  ctx.quadraticCurveTo(L*0.66,10.2*s, L*0.4,7.6*s);         // heavy belly (edge)
+  ctx.quadraticCurveTo(L*0.16,5.0*s, -1*s,2.6*s);           // edge back to bolster
+  ctx.closePath(); ctx.fill();
+  // inner edge bevel line (parallel to the edge)
+  ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=0.9*s;
+  ctx.beginPath(); ctx.moveTo(2*s,2.2*s);
+  ctx.quadraticCurveTo(L*0.5,7.0*s,L*0.85,3.2*s); ctx.stroke();
+  // spine glint
+  ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.lineWidth=0.7*s;
+  ctx.beginPath(); ctx.moveTo(2*s,-1.6*s); ctx.quadraticCurveTo(L*0.5,-3.0*s,L*0.82,-0.4*s); ctx.stroke();
+  // cho notch near the bolster
+  ctx.fillStyle='#8a929e'; ctx.beginPath(); ctx.arc(2.5*s,3.2*s,1.1*s,0,7); ctx.fill();
 }
 
 /* Saya (scabbard) at the left hip. Extends BACK (-x) from a koiguchi mouth near
@@ -312,35 +347,35 @@ function drawSaya(withBlade, drawn){
   ctx.save();
   ctx.translate(-4,42); ctx.rotate(0.5);          // left hip, angled down-back
   const L=32;
-  ctx.fillStyle='#6b1f1f'; ctx.fillRect(-2,-4,6,8);              // obi tie
-  ctx.fillStyle='#101216'; ctx.fillRect(-L,-2.4,L,4.8);         // lacquered body
+  ctx.fillStyle='#101216'; ctx.fillRect(-L,-2.4,L,4.8);         // black lacquered body
   ctx.fillStyle='#20242c'; ctx.fillRect(-L,-2.4,L,1.3);         // sheen
-  ctx.fillStyle='#3a3f47'; ctx.fillRect(-L-1.5,-2.4,2,4.8);     // kojiri (end cap)
+  ctx.fillStyle='#caa84e'; ctx.fillRect(-L*0.62,-2.4,5,4.8);    // gold panel
+  ctx.fillStyle='#caa84e'; ctx.fillRect(-L*0.42,-2.4,3,4.8);    // gold band
+  ctx.fillStyle='#caa84e'; ctx.fillRect(-L-1.5,-2.4,2,4.8);     // kojiri (gold end cap)
   ctx.fillStyle='#2a2f38'; ctx.fillRect(-2,-2.9,4,5.8);         // koiguchi (mouth)
+  // red sageo tassel tied near the mouth
+  ctx.strokeStyle='#b8302a'; ctx.lineWidth=1.6;
+  ctx.beginPath(); ctx.moveTo(-4,2); ctx.quadraticCurveTo(-7,7,-3,10); ctx.stroke();
+  ctx.fillStyle='#c8352d'; ctx.beginPath(); ctx.arc(-3,11,1.8,0,7); ctx.fill();
   if(withBlade){
-    // tsuka protruding forward from the mouth — the hand grips here
-    ctx.fillStyle='#1d2126'; ctx.fillRect(1,-2.1,12,4.2);
-    ctx.strokeStyle='#0b0d10'; ctx.lineWidth=0.7;
-    for(let i=0;i<3;i++){ const hx=2+i*3.6; ctx.beginPath(); ctx.moveTo(hx,-2.1); ctx.lineTo(hx+2,2.1); ctx.stroke(); }
-    ctx.fillStyle='#2b2f36'; ctx.beginPath(); ctx.ellipse(13,0,1.5,3.4,0,0,7); ctx.fill();   // tsuba at mouth
-    if(drawn>0.02){ // bright blade sliding out past the tsuba as the cut starts
-      ctx.fillStyle='#eef3f9'; ctx.fillRect(13, -1.0, drawn*24, 2.0);
-    }
+    // katana tsuka protruding forward from the mouth (blade seated inside)
+    ctx.fillStyle='#141619'; ctx.fillRect(1,-2.1,12,4.2);
+    ctx.fillStyle='#b8302a'; for(let i=0;i<3;i++){ const cx=2.5+i*3.4;
+      ctx.beginPath(); ctx.moveTo(cx,0); ctx.lineTo(cx+1.2,-1.3); ctx.lineTo(cx+2.4,0); ctx.lineTo(cx+1.2,1.3); ctx.closePath(); ctx.fill(); }
+    ctx.fillStyle='#caa84e'; ctx.beginPath(); ctx.ellipse(13,0,1.5,3.4,0,0,7); ctx.fill();   // gold tsuba
+    if(drawn>0.02){ ctx.fillStyle='#eef3f9'; ctx.fillRect(14, -1.0, drawn*24, 2.0); }
   }
   ctx.restore();
 }
 
-/* Choreographed sword-hand pose per move: each attack sweeps a DIFFERENT arc
-   (diagonal down, rising, flat cleave, overhead, iai draw) instead of one canned
-   top-down swing. Returns hand target {hx,hy}, blade rotation and the phase. */
-const REST_POSE={hx:15,hy:31,rot:-1.15};
+/* Choreographed hand pose per move — each hit is a different, mostly-horizontal
+   motion: a forward POKE, a SIDE swing, then a RISING finisher (no canned
+   top-down chop). Returns hand target {hx,hy}, blade rotation and the phase. */
+const REST_POSE={hx:14,hy:30,rot:-0.6};
 const POSE={
-  L1:{wind:{hx:-3,hy:6, rot:-2.5}, hit:{hx:25,hy:47,rot:1.0},  rec:{hx:15,hy:40,rot:0.2}},  // diagonal downslash
-  L2:{wind:{hx:-2,hy:49,rot:2.2},  hit:{hx:23,hy:1, rot:-1.6}, rec:{hx:18,hy:14,rot:-1.0}}, // rising slash
-  L3:{wind:{hx:-11,hy:20,rot:-3.1},hit:{hx:29,hy:27,rot:0.4},  rec:{hx:16,hy:29,rot:-0.6}}, // flat cleave
-  H1:{wind:{hx:1,hy:-13,rot:-2.7}, hit:{hx:23,hy:49,rot:1.3},  rec:{hx:14,hy:34,rot:0.4}},  // overhead chop
-  HF:{wind:{hx:-13,hy:4, rot:-2.9},hit:{hx:31,hy:31,rot:0.2},  rec:{hx:16,hy:30,rot:-0.4}}, // wide cleave
-  IAI:{wind:{hx:8,hy:47,rot:0.0}, hit:{hx:44,hy:27,rot:-0.05},rec:{hx:20,hy:28,rot:-0.3}}   // grip saya → draw-cut
+  L1:{wind:{hx:-2,hy:30,rot:-0.5}, hit:{hx:38,hy:31,rot:0.05}, rec:{hx:18,hy:31,rot:-0.2}}, // straight poke/thrust
+  L2:{wind:{hx:-9,hy:20,rot:-1.5}, hit:{hx:32,hy:35,rot:0.8},  rec:{hx:16,hy:31,rot:0.0}},  // side swing (horizontal)
+  L3:{wind:{hx:-6,hy:42,rot:2.0},  hit:{hx:34,hy:16,rot:-1.0}, rec:{hx:18,hy:26,rot:-0.4}}  // rising finisher
 };
 function attackPose(p,mv){
   if(!mv) return null;
@@ -363,10 +398,11 @@ function attackPose(p,mv){
    module ring so only the live swing draws a trail. */
 let hariTrail=[];
 function pushTrail(hx,hy,rot,kind){
-  const tx=hx+Math.cos(rot)*BLADE_LEN, ty=hy+Math.sin(rot)*BLADE_LEN;   // blade tip
-  const mx=hx+Math.cos(rot)*BLADE_LEN*0.5, my=hy+Math.sin(rot)*BLADE_LEN*0.5;
-  hariTrail.push({bx:mx,by:my,tx,ty,life:9,max:9,kind});
-  if(hariTrail.length>10) hariTrail.shift();
+  const len = kind==='iai'?BLADE_LEN:KH_LEN;              // katana longer than khukuri
+  const tx=hx+Math.cos(rot)*len, ty=hy+Math.sin(rot)*len; // blade tip
+  const mx=hx+Math.cos(rot)*len*0.55, my=hy+Math.sin(rot)*len*0.55;
+  hariTrail.push({bx:mx,by:my,tx,ty,life:6,max:6,kind});
+  if(hariTrail.length>6) hariTrail.shift();               // shorter, tighter smear
 }
 function stepTrail(){ for(const s of hariTrail) s.life--; hariTrail=hariTrail.filter(s=>s.life>0); }
 function drawTrail(){
@@ -399,19 +435,39 @@ export function drawHari(){
   const airborne = !p.onGround;
   const parrying = p.parry>0;
   const wp       = p.walkPhase;
-  const pose     = attackPose(p, mv);
-  const iaiSheathed = mv && mv.iai && p.atkT<mv.a0;   // blade still in the saaya
+  const cpose    = attackPose(p, mv);
+  // ULT = iai-jutsu: a down→up rising KATANA draw-cut, driven by p.ult (24→0)
+  let ultPose=null;
+  if(p.ult>0){
+    const q=(24-p.ult)/24; let a,b,f;
+    if(q<0.28){ a={hx:8,hy:37,rot:-0.1}; b={hx:-3,hy:41,rot:0.15}; f=q/0.28; }               // low ready crouch, blade held horizontal at hip
+    else if(q<0.7){ a={hx:-3,hy:41,rot:0.15}; b={hx:42,hy:9,rot:-1.2}; f=(q-0.28)/0.42; f=1-Math.pow(1-f,3); } // explosive down→up draw-cut
+    else { a={hx:42,hy:9,rot:-1.2}; b={hx:22,hy:24,rot:-0.4}; f=(q-0.7)/0.3; }               // recover
+    ultPose={hx:a.hx+(b.hx-a.hx)*f, hy:a.hy+(b.hy-a.hy)*f, rot:a.rot+(b.rot-a.rot)*f, phase:q<0.7?'hit':'rec'};
+  }
+  let pose = ultPose || cpose;               // whichever is driving the arm/body
+  const ulting = p.ult>0;
+  // DEATHBLOW: a deep khukuri thrust finisher — overrides the pose
+  const dbActive = p.deathblow>0;
+  if(dbActive){
+    const q=1-p.deathblow/DEATHBLOW_FRAMES;
+    const hx = q<0.35 ? 8+(q/0.35)*36 : 44;   // stab out fast, then hold buried
+    pose = {hx, hy:29, rot:0.03, phase:'hit'};
+  }
+  const crouch = (ulting && (24-p.ult)<8) ? 4 : 0;   // low iai ready-stance dip
 
-  // feed the smear trail while the blade is live
-  if(pose && (pose.phase==='hit' || (pose.phase==='rec' && p.atkT<=mv.a1+2)))
-    pushTrail(pose.hx,pose.hy,pose.rot, mv.iai?'iai':mv.heavy?'heavy':'light');
+  // feed the smear while a blade is live
+  if(dbActive) pushTrail(pose.hx,pose.hy,pose.rot,'iai');
+  else if(ultPose){ if((24-p.ult)>=5) pushTrail(ultPose.hx,ultPose.hy,ultPose.rot,'iai'); }
+  else if(cpose && (cpose.phase==='hit' || (cpose.phase==='rec' && p.atkT<=mv.a1+2)))
+    pushTrail(cpose.hx,cpose.hy,cpose.rot,'light');
   stepTrail();
 
   const sq=p.squash, scX=1+sq*0.22, scY=1-sq*0.26;
   const bob=moving?Math.abs(Math.sin(wp))*2.2:Math.sin(p.breathe)*0.9;
 
   ctx.save();
-  ctx.translate(p.x+p.w/2, p.y + bob);
+  ctx.translate(p.x+p.w/2, p.y + bob + crouch);
   ctx.scale(p.facing,1);
 
   // full-body afterimages on fast, flashy moves + dodge/ult
@@ -441,9 +497,9 @@ export function drawHari(){
   foot(fA,'#b0a685');   // far leg (shaded)
   foot(fB,ROBE_D);      // near leg
 
-  /* ---- saya (scabbard) on the hip: empty normally, holds the blade for the iai
-     draw and slides it out as the cut begins ---- */
-  drawSaya(iaiSheathed, iaiSheathed ? Math.min(1, p.atkT/Math.max(1,mv.a0)) : 0);
+  /* ---- katana saya on the hip: holds the katana normally; empty while the ult
+     (iai draw) has it in hand ---- */
+  drawSaya(!ulting, 0);
 
   /* ---- OFF ARM (two-bone) ---- */
   {
@@ -465,41 +521,30 @@ export function drawHari(){
   ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(-9,22); ctx.lineTo(8,46); ctx.stroke();
   ctx.fillStyle=SASH; ctx.fillRect(-10,42,20,3);
 
-  /* ---- PARRY GUARD ---- */
-  if(parrying){
-    const active=p.parry>PT, flare2=p.parryFlash>0?1:0;
-    ctx.strokeStyle = flare2?'#ffffff' : active?'rgba(159,224,255,0.95)':'rgba(120,160,190,0.35)';
-    ctx.lineWidth = flare2?6 : active?3.5:2;
-    ctx.beginPath(); ctx.arc(10,30, active?26:22, -1.35,1.35); ctx.stroke();
-    if(active){ ctx.strokeStyle=`rgba(200,240,255,${0.25+0.2*Math.sin(t/2)})`; ctx.lineWidth=9;
-      ctx.beginPath(); ctx.arc(10,30,26,-1.35,1.35); ctx.stroke(); }
-    if(flare2){ ctx.fillStyle=`rgba(255,255,255,${0.5*p.parryFlash/10})`; ctx.beginPath(); ctx.arc(10,30,34,0,7); ctx.fill(); }
+  /* ---- PARRY: no shield arc — just a small orange spark flash at the blade when a
+     deflect lands (the spark burst itself comes from parrySuccess) ---- */
+  if(parrying && p.parryFlash>0){
+    ctx.fillStyle=`rgba(255,176,56,${0.6*p.parryFlash/10})`;
+    ctx.beginPath(); ctx.arc(16,26,5,0,7); ctx.fill();
   }
 
   /* ---- smear ribbon behind the blade ---- */
   drawTrail();
 
-  /* ---- SWORD ARM (two-bone) + HYBRID BLADE ---- */
+  /* ---- SWORD ARM (two-bone) + BLADE (khukuri; katana during the ult iai) ---- */
   {
-    // hand target: attack pose, else throw / guard / airborne / walk / idle drift
+    // hand target: attack/ult pose, else guard / airborne / walk / idle drift
     let hx,hy,rot;
     if(pose){ hx=pose.hx; hy=pose.hy; rot=pose.rot; }
-    else if(p.throwAnim>0){ hx=18; hy=26; rot=-2.2+(1-p.throwAnim/10)*1.4; }
-    else if(parrying){ hx=14; hy=24; rot=p.parry>PT?-2.05:-1.75; }
-    else if(airborne){ hx=16; hy=30; rot=p.vy<0?-1.55:-0.95; }
-    else if(moving){ hx=15; hy=31+Math.sin(wp)*1.5; rot=-1.2+Math.sin(wp)*0.16; }
-    else { hx=15; hy=31+Math.sin(p.breathe)*0.6; rot=-1.15+Math.sin(p.breathe)*0.05; }
+    else if(parrying){ hx=16; hy=24; rot=p.parry>PT?-1.7:-1.4; }   // blade raised to guard
+    else if(airborne){ hx=16; hy=30; rot=p.vy<0?-1.2:-0.7; }
+    else if(moving){ hx=15; hy=31+Math.sin(wp)*1.5; rot=-0.7+Math.sin(wp)*0.16; }
+    else { hx=15; hy=31+Math.sin(p.breathe)*0.6; rot=-0.6+Math.sin(p.breathe)*0.05; }
     limb2(4,27,hx,hy,12,13,1,5,SKIN,SKIN_D,3.2);
-    if(!iaiSheathed){
-      ctx.save(); ctx.translate(hx,hy); ctx.rotate(rot); katanaBlade(1);
-      if(parrying && p.parry>PT){ ctx.fillStyle=`rgba(200,240,255,${0.35+0.3*Math.sin(t/3)})`; ctx.fillRect(4,-2,34,2); }
-      ctx.restore();
-    }
+    ctx.save(); ctx.translate(hx,hy); ctx.rotate(rot);
+    if(ulting) katanaBlade(1); else khukuriBlade(1);
+    ctx.restore();
   }
-
-  // extra clean slash arc on ult (keeps the ult reading big)
-  if(p.ult>4){ ctx.strokeStyle='rgba(255,210,74,0.95)'; ctx.lineWidth=9;
-    ctx.beginPath(); ctx.arc(14,28,56,-1.4,1.0); ctx.stroke(); }
 
   /* ---- HEAD ---- */
   const headTilt = pose ? (pose.phase==='wind'?-0.15:0.12) : moving?Math.sin(wp)*0.05 : airborne?(p.vy<0?-0.12:0.08):0;
@@ -524,11 +569,30 @@ export function drawEnemy(e){
   if(e.type==='heavy') drawHeavy(e);
   else if(e.type==='thug') drawThug(e);
   else drawCadre(e);
+  // block clash arc (grey) when an attack was blocked
+  if(e.blockFlash>0){
+    ctx.strokeStyle=`rgba(205,213,223,${e.blockFlash/8})`; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.arc(e.x+e.w/2+e.dir*14, e.y+24, 12, -1.2, 1.2); ctx.stroke();
+  }
   // HP bar for heavies
   if(e.type==='heavy'){
     const bw=40, bx=e.x-3, by=e.y-10;
     ctx.fillStyle='#3a0000'; ctx.fillRect(bx,by,bw,5);
     ctx.fillStyle='#cc3030'; ctx.fillRect(bx,by,bw*(e.hp/e.maxHp),5);
+  }
+  // posture bar (yellow→orange; white when broken) sits just above the enemy
+  if(e.posture>0.05 || e.stagger>0){
+    const bw=34, bx=e.x+e.w/2-bw/2, by=e.y-16;
+    ctx.fillStyle='rgba(20,15,5,0.6)'; ctx.fillRect(bx-1,by-1,bw+2,5);
+    const pct=Math.min(1,e.posture/e.maxPosture);
+    ctx.fillStyle = e.stagger>0 ? '#ffffff' : pct>0.75?'#ff7a30':'#ffd24a';
+    ctx.fillRect(bx,by,bw*pct,3);
+  }
+  // staggered → pulsing red marker: hit now for a deathblow
+  if(e.stagger>0){
+    ctx.fillStyle=`rgba(255,70,70,${0.5+0.5*Math.sin(state.t/4)})`;
+    ctx.font='bold 15px system-ui'; ctx.textAlign='center';
+    ctx.fillText('▼', e.x+e.w/2, e.y-20); ctx.textAlign='left';
   }
 }
 
@@ -831,19 +895,16 @@ export function drawHUD(){
     ctx.fillRect(14+col*17,14+row*18,13,13);
   }
   drawMomo(26,50,0.95); ctx.fillStyle='#e8d9b5'; ctx.font='bold 15px system-ui'; ctx.fillText('× '+player.coins,40,55);
-  ctx.fillStyle='#e8d9b5'; ctx.fillText('khukuri:',14,77);
-  for(let i=0;i<player.maxAmmo;i++){ ctx.fillStyle=i<player.ammo?'#cfd5df':'#3a3a3a'; ctx.fillRect(74+i*10,67,7,11); }
-  ctx.fillStyle='#e8d9b5'; ctx.fillText('ult:',150,77);
+  // ult (iai) charges
+  ctx.fillStyle='#e8d9b5'; ctx.font='bold 15px system-ui'; ctx.fillText('iai:',14,77);
   for(let i=0;i<3;i++){
     const lit=i<player.charges;
     ctx.fillStyle=lit?'#ffd24a':'#3a3a3a';
-    ctx.beginPath(); ctx.arc(184+i*16,72,6,0,7); ctx.fill();
-    if(lit){ // charged pips pulse so it's obvious the ult is available
-      ctx.strokeStyle=`rgba(255,210,74,${0.35+0.35*Math.sin(state.t/9+i)})`;
-      ctx.lineWidth=2; ctx.beginPath(); ctx.arc(184+i*16,72,9,0,7); ctx.stroke();
-    }
+    ctx.beginPath(); ctx.arc(50+i*16,72,6,0,7); ctx.fill();
+    if(lit){ ctx.strokeStyle=`rgba(255,210,74,${0.35+0.35*Math.sin(state.t/9+i)})`;
+      ctx.lineWidth=2; ctx.beginPath(); ctx.arc(50+i*16,72,9,0,7); ctx.stroke(); }
   }
-  if(player.charges>=1){ ctx.fillStyle='#ffd24a'; ctx.font='11px system-ui'; ctx.fillText('U!',232,76); }
+  if(player.charges>=1){ ctx.fillStyle='#ffd24a'; ctx.font='11px system-ui'; ctx.fillText('E!',100,76); }
 
   // difficulty label
   ctx.fillStyle='rgba(232,217,181,0.6)'; ctx.font='11px system-ui';
@@ -879,8 +940,16 @@ export function drawHUD(){
     ctx.strokeStyle='#fff'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(bx+bw*0.33,by); ctx.lineTo(bx+bw*0.33,by+12); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(bx+bw*0.66,by); ctx.lineTo(bx+bw*0.66,by+12); ctx.stroke();
+    // posture bar under the HP bar
+    const ppct=Math.min(1,boss.posture/boss.maxPosture);
+    ctx.fillStyle='rgba(20,15,5,0.6)'; ctx.fillRect(bx,by+13,bw,4);
+    ctx.fillStyle=boss.stagger>0?'#ffffff':ppct>0.75?'#ff7a30':'#ffd24a';
+    ctx.fillRect(bx,by+13,bw*ppct,4);
     ctx.fillStyle='#e8d9b5'; ctx.font='13px system-ui'; ctx.textAlign='center';
-    ctx.fillText('Bhrasta Mantri · Phase '+boss.phase,W/2,44); ctx.textAlign='left';
+    ctx.fillText('Bhrasta Mantri · Phase '+boss.phase,W/2,44);
+    if(boss.stagger>0){ ctx.fillStyle=`rgba(255,80,80,${0.6+0.4*Math.sin(state.t/4)})`;
+      ctx.font='bold 13px system-ui'; ctx.fillText('SUSTAYO — prahar gara!',W/2,58); }
+    ctx.textAlign='left';
   }
   if(state.muted){ ctx.fillStyle='#e8d9b5'; ctx.font='12px system-ui'; ctx.fillText('muted (M)',W-90,22); }
   if(state.won && boss && !boss.alive && Math.abs(player.x-cage.x)<90 && state.scene==='play'){

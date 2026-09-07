@@ -74,7 +74,8 @@ export function updateSparks(){
 /* ================= INPUT ================= */
 export const keys = {};
 // lightQ / heavyQ replace the old single atkQ — the two combo buttons.
-export const input = {jumpQ:false, lightQ:false, heavyQ:false, throwQ:false, dodgeQ:false, parryQ:false, ultQ:false, iaiQ:false, freeQ:false};
+// Left mouse = light attack, Right mouse = parry, E = ult (iai). No heavy/throw.
+export const input = {jumpQ:false, lightQ:false, dodgeQ:false, parryQ:false, ultQ:false, freeQ:false};
 export function clearQueued(){
-  input.jumpQ=input.lightQ=input.heavyQ=input.throwQ=input.dodgeQ=input.parryQ=input.ultQ=input.iaiQ=false;
+  input.jumpQ=input.lightQ=input.dodgeQ=input.parryQ=input.ultQ=false;
 }

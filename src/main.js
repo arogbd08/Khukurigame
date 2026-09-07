@@ -64,12 +64,7 @@ function wireInput(scene){
       if(e.code!=='KeyR' && e.code!=='KeyM') return;
     }
     if((e.code==='KeyW'||e.code==='Space') && !e.repeat) input.jumpQ=true;
-    if(e.code==='KeyJ' && !e.repeat) input.lightQ=true;    // Light attack
-    if(e.code==='KeyK' && !e.repeat) input.heavyQ=true;    // Heavy attack
-    if(e.code==='KeyI' && !e.repeat) input.throwQ=true;    // khukuri throw (moved off K)
-    if(e.code==='KeyO' && !e.repeat) input.iaiQ=true;      // iai-jutsu
-    if(e.code==='KeyL' && !e.repeat) input.parryQ=true;
-    if(e.code==='KeyU' && !e.repeat) input.ultQ=true;
+    if(e.code==='KeyE' && !e.repeat) input.ultQ=true;      // ult = iai-jutsu draw
     if(e.code==='KeyF' && !e.repeat) input.freeQ=true;
     if((e.code==='ShiftLeft'||e.code==='ShiftRight') && !e.repeat) input.dodgeQ=true;
     if(e.code==='KeyR') reset();
@@ -77,7 +72,16 @@ function wireInput(scene){
     keys[e.code]=true;
   });
   addEventListener('keyup',e=>keys[e.code]=false);
-  scene.game.canvas.addEventListener('mousedown',()=>{ startBgm(); if(state.scene==='intro') startGame(); });
+  // Mouse combat: Left = attack, Right = parry. (Left also starts the game on the intro.)
+  const cvEl = scene.game.canvas;
+  cvEl.addEventListener('contextmenu', e=>e.preventDefault());   // right-click parries, no menu
+  cvEl.addEventListener('mousedown', e=>{
+    startBgm();
+    if(state.scene==='intro'){ if(e.button===0) startGame(); return; }
+    if(state.scene==='cutscene' || state.scene==='credits') return;
+    if(e.button===0) input.lightQ=true;
+    else if(e.button===2){ e.preventDefault(); input.parryQ=true; }
+  });
 }
 
 /* ================= PHASER SCENE ================= */

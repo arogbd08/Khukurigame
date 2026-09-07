@@ -2,7 +2,8 @@ import {ctx} from '../canvas.js';
 import {W, H, GROUND, WORLD,
         PARRY_DURATION, PARRY_ACTIVE, PARRY_COOLDOWN, PARRY_HITSTOP, PARRY_SHAKE,
         ULT_COST, ULT_MAX_CHARGES, ULT_DMG_NORMAL, ULT_DMG_HEAVY, ULT_DMG_BOSS,
-        MOVES, COMBO_GAP, IAI_COOLDOWN} from '../config.js';
+        MOVES, COMBO_GAP,
+        STAGGER_FRAMES, POSTURE_REGEN, POSTURE_HIT, POSTURE_BLOCK, POSTURE_PARRY, DEATHBLOW_FRAMES} from '../config.js';
 import {state, sub, say, toast, keys, input, clearQueued, diff,
         shakeScreen, flashScreen, burst, updateSparks, updateToasts, toasts} from '../state.js';
 import {sfx, resumeBgm} from '../audio.js';
@@ -16,7 +17,7 @@ import {drawSky, drawBackground, drawGround, drawMomo, drawBlade, drawHealOrb,
 import {enterCutscene} from './CutsceneScene.js';
 
 /* ================= HELPERS ================= */
-function invuln(){return player.hurt>0||player.dodge>4||player.ult>4||player.move==='IAI';}
+function invuln(){return player.hurt>0||player.dodge>4||player.ult>4;}   // ult (=iai) dashes with i-frames
 function gainCharge(){ player.charges=Math.min(ULT_MAX_CHARGES,player.charges+1); }
 
 function hurtPlayer(dir,dmg){
@@ -37,22 +38,23 @@ function spawnHealDrop(x,y){
   healDrops.push({x,y,got:false,bob:Math.random()*6.28});
 }
 
-/* Nine Sols-flavoured deflect: freeze, shake, white flash, spark shower and a
-   steel clang. Reads as a hard "stop" rather than a soft block. */
-function parrySuccess(srcX, srcY){
+/* Deflect: a small, sharp ORANGE spark burst at the clash point (no big arc),
+   plus freeze + shake for weight. Reads as a crisp "ting", not a shield. */
+function parrySuccess(srcX, srcY, target, isBoss){
   gainCharge();
   state.hitstop=PARRY_HITSTOP;
-  shakeScreen(PARRY_SHAKE);
-  flashScreen(9);
+  shakeScreen(PARRY_SHAKE*0.7);
+  flashScreen(3);
   player.parryFlash=10;
   sfx('parry');
   const px = srcX===undefined ? player.x+player.w/2+player.facing*18 : srcX;
   const py = srcY===undefined ? player.y+28 : srcY;
-  // tight hot core + wide cool shower
-  burst(px,py,14,{col:'#ffffff', speed:6.5, life:16, spread:6.283, grav:0.06});
-  burst(px,py,20,{col:'#9fe0ff', speed:4.2, life:30, spread:6.283, grav:0.22});
-  burst(px,py,8, {col:'#ffe9a8', speed:8.0, life:22, angle:player.facing>0?0:Math.PI, spread:1.5, grav:0.1});
-  toast('TWAANG!  Pari  +1','#9fe0ff');
+  // tight hot orange spark cluster — small and punchy
+  burst(px,py,10,{col:'#ffb038', speed:5.5, life:12, spread:6.283, grav:0.05});
+  burst(px,py,6, {col:'#ffe0a0', speed:3.0, life:16, spread:6.283, grav:0.12});
+  // deflecting an attack is the fast route to breaking posture
+  if(target) addPosture(target, POSTURE_PARRY, isBoss);
+  toast('Pari!  +1','#ffb038');
 }
 
 function killEnemy(en){
@@ -60,14 +62,13 @@ function killEnemy(en){
   shakeScreen(4);
   burst(en.x+en.w/2, en.y+en.h/2, 16, {col:'#d8c8a0', speed:4.5, life:26});
   for(let i=0;i<(en.type==='heavy'?5:3);i++) momos.push({x:en.x+i*9,y:GROUND-30,got:false});
-  drops.push({x:en.x+en.w/2,y:GROUND-28,got:false});
   if(Math.random()<0.4) toast('Ek bhrasta kam bhayo.','#cfe0a0');
 }
 
 /* ================= COMBO ENGINE =================
-   Light (J) and Heavy (K) feed a small move graph (MOVES in config.js). Inputs
-   are buffered and chain at each move's cancel window, so a mistimed-early press
-   still lands the next hit. A move plays out to `dur` then drops back to idle. */
+   Left-mouse attacks feed the light string (MOVES in config.js). Presses buffer
+   and chain at each move's cancel window, so a mistimed-early click still lands
+   the next hit. A move plays out to `dur` then drops back to idle. */
 function startMove(key){
   const mv=MOVES[key];
   if(!mv) return;
@@ -79,32 +80,44 @@ function updateCombo(){
   // combo counter decays when you stop connecting hits
   if(player.comboTimer>0){ player.comboTimer--; if(player.comboTimer<=0) player.comboCount=0; }
 
-  const L=input.lightQ, Hv=input.heavyQ, I=input.iaiQ;
-  input.lightQ=input.heavyQ=input.iaiQ=false;
+  const L=input.lightQ; input.lightQ=false;
   const canAct = player.dodge<=0 && player.ult<=0 && player.hurt<=0;
 
   if(player.move){
     const mv=player.mv;
     player.atkT++;
-    // iai draw whoosh right as the blade leaves the sheath
-    if(mv.iai && player.atkT===mv.a0) sfx('spin_attack');
-    // latest press wins as the buffered follow-up
-    if(Hv) player.buffer='H'; else if(L) player.buffer='L';
-    // chain once we're past the cancel window and the graph allows it
+    if(L) player.buffer='L';   // buffer the follow-up
     if(player.atkT>=mv.cancel && player.buffer && mv.next && mv.next[player.buffer] && canAct){
       startMove(mv.next[player.buffer]); return;
     }
     if(player.atkT>=mv.dur){ player.move=null; player.mv=null; player.buffer=null; }
     return;
   }
-  // idle → iai-jutsu (cooldown-gated) or open a string
-  if(canAct){
-    if(I && player.iaiCd<=0){ startMove('IAI'); player.iaiCd=IAI_COOLDOWN; toast('Iai-jutsu!','#cfe7ff'); }
-    else if(Hv) startMove('H1');
-    else if(L) startMove('L1');
-  }
+  if(canAct && L) startMove('L1');   // open the string
 }
 function cancelCombo(){ player.move=null; player.mv=null; player.buffer=null; }
+
+/* ---- posture / deathblow ---- */
+function breakPosture(e, isBoss){
+  e.stagger=STAGGER_FRAMES; e.posture=e.maxPosture;
+  shakeScreen(6); sfx('boss'); flashScreen(4);
+  toast(isBoss?'Mantri sustayo! (Ghatak!)':'Santulan tutyo!','#ffd24a');
+  burst(e.x+(e.w||60)/2, e.y+12, 14, {col:'#ffd24a', speed:4.5, life:24, spread:6.283});
+}
+function addPosture(e, amt, isBoss){
+  if(e.stagger>0) return;
+  e.posture += amt;
+  if(e.posture>=e.maxPosture) breakPosture(e, isBoss);
+}
+function triggerDeathblow(e){
+  player.deathblow=DEATHBLOW_FRAMES; player.dbTarget=e; e.dying=true;
+  player.facing = e.x>=player.x ? 1 : -1;
+  player.x = e.x - player.facing*26;          // step in for the finisher
+  state.hitstop=18; flashScreen(12); shakeScreen(10);
+  sfx('hit'); sfx('boss_roar');
+  burst(e.x+e.w/2, e.y+e.h/2, 10, {col:'#ffffff', speed:5, life:14, spread:6.283});
+  toast('Ghatak prahar!','#ff5050');
+}
 function registerComboHit(){
   player.comboCount++; player.comboTimer=COMBO_GAP;
   const c=player.comboCount;
@@ -118,11 +131,12 @@ export function reset(){
   Object.assign(player,{x:60,y:GROUND-58,vx:0,vy:0,onGround:false,facing:1,jumps:2,
     hp:D.maxHp,maxHp:D.maxHp,coins:0,ammo:3,atk:0,throwCd:0,dodge:0,dodgeCd:0,dodgeDir:1,
     hurt:0,parry:0,parryCd:0,charges:0,ult:0,wasOnGround:false,
-    move:null,mv:null,atkT:0,atkId:0,iaiCd:0,buffer:null,comboCount:0,comboTimer:0,
+    move:null,mv:null,atkT:0,atkId:0,deathblow:0,dbTarget:null,buffer:null,comboCount:0,comboTimer:0,
     walkPhase:0,breathe:0,squash:0,parryFlash:0,throwAnim:0,turnLean:0,atkLean:0});
   resetEnemies(); resetMomos(); paper.got=false;
   Object.assign(boss,{x:4760,hp:18,maxHp:18,dir:-1,state:'wait',timer:60,hitT:0,
-    alive:true,active:false,phase:1,vx:0,vy:0,summoned:0,spinT:0,rageT:0,enrageFlash:0,stomp:0,anim:0,lastAtkId:-1});
+    alive:true,active:false,phase:1,vx:0,vy:0,summoned:0,spinT:0,rageT:0,enrageFlash:0,stomp:0,anim:0,lastAtkId:-1,
+    posture:0,maxPosture:12,stagger:0,blockFlash:0});
   shots.length=pthrows.length=ethrows.length=drops.length=shocks.length=healDrops.length=0;
   toasts.length=0;
   state.won=false; state.lost=false; state.hitstop=0; state.t=0; state.scene='play';
@@ -139,6 +153,16 @@ export function updatePlay(){
   if(state.flash>0) state.flash--;
   updateSparks();
   updateToasts();
+  // deathblow plays out even through hitstop so the finisher reads
+  if(player.deathblow>0){
+    player.deathblow--;
+    if(player.deathblow===0 && player.dbTarget){
+      const e=player.dbTarget; player.dbTarget=null;
+      burst(e.x+e.w/2,e.y+e.h/2,26,{col:'#c83030',speed:6,life:30,spread:6.283});
+      burst(e.x+e.w/2,e.y+e.h/2,16,{col:'#ffd24a',speed:5,life:26,spread:6.283});
+      shakeScreen(8); killEnemy(e);
+    }
+  }
   if(state.lost){ clearQueued(); return; }
   if(state.hitstop>0){ state.hitstop--; clearQueued(); return; }
   state.t++;
@@ -148,21 +172,20 @@ export function updatePlay(){
   const sp=3.3;
   if(player.dodgeCd>0)player.dodgeCd--;
   if(player.parryCd>0)player.parryCd--;
-  if(player.throwCd>0)player.throwCd--;
-  if(player.iaiCd>0)player.iaiCd--;
   if(player.parry>0)player.parry--;
   if(player.parryFlash>0)player.parryFlash--;
   if(player.throwAnim>0)player.throwAnim--;
   if(player.squash>0)player.squash=Math.max(0,player.squash-0.09);
   player.breathe+=0.06;
 
-  // ULT — now a one-charge special. Cheaper to fire, so it hits softer.
+  // ULT = IAI-JUTSU (E): one-charge katana draw, dashes forward, down→up cut.
   if(input.ultQ && player.ult<=0 && player.charges>=ULT_COST){
-    player.ult=24; player.charges-=ULT_COST; sfx('ult');
+    player.ult=24; player.charges-=ULT_COST; cancelCombo();
+    sfx('spin_attack'); sfx('ult');
     shakeScreen(7); flashScreen(6);
-    burst(player.x+player.w/2, player.y+28, 22,
-      {col:'#ffd24a', speed:6, life:28, angle:player.facing>0?0:Math.PI, spread:2.4});
-    toast('Khukuri prahar!','#ffd24a');
+    burst(player.x+player.w/2, player.y+28, 20,
+      {col:'#ffe6a0', speed:6, life:26, angle:player.facing>0?0:Math.PI, spread:1.8});
+    toast('Iai-jutsu!','#ffe6a0');
   }
   input.ultQ=false;
 
@@ -233,26 +256,20 @@ export function updatePlay(){
   // difficulty widens/narrows the active deflect window (Casual is more forgiving)
   const parrying=player.parry>diff().parryThresh;
 
-  /* ---- combo attacks (Light J / Heavy K) + throw (I) ---- */
+  /* ---- combo attacks (Left mouse) ---- */
   updateCombo();
   // build the live hitbox + its stats from the current move's active window
   let hb=null, hbDmg=1, hbKb=6, hbStop=3, hbHeavy=false;
   if(player.move){
     const mv=player.mv;
-    // forward drift on heavy swings so they feel like they step into the blow
-    if(mv.lunge && player.atkT>=mv.a0 && player.atkT<=mv.a1) player.x+=player.facing*mv.lunge;
     if(player.atkT>=mv.a0 && player.atkT<=mv.a1){
       const r=mv.reach;
       hb={x: player.facing===1 ? player.x+player.w-6 : player.x+player.w-6-r, y:player.y-6, w:r, h:62};
-      hbDmg=mv.dmg; hbKb=mv.kb; hbStop=mv.hitstop; hbHeavy=!!mv.heavy;
+      hbDmg=mv.dmg; hbKb=mv.kb; hbStop=mv.hitstop; hbHeavy=!!mv.finisher;
     }
   }
   if(player.ult>4){ const u=player.facing===1?player.x+player.w-10:player.x-66;
     hb={x:u,y:player.y-10,w:76,h:74}; }
-  if(input.throwQ && player.throwCd===0 && player.ammo>0){
-    player.throwCd=18; player.ammo--; sfx('throw'); player.throwAnim=10;
-    pthrows.push({x:player.x+player.w/2,y:player.y+22,vx:player.facing*9,spin:0,life:80}); }
-  input.throwQ=false;
   if(player.hurt>0)player.hurt--;
 
   /* ---- momo / paper / drops / heals ---- */
@@ -280,7 +297,12 @@ export function updatePlay(){
     if(!e.alive)continue;
     if(e.hitT>0)e.hitT--;
     if(e.dodgeCd>0)e.dodgeCd--;
+    if(e.blockFlash>0)e.blockFlash--;
     const dx=player.x-e.x, dist=Math.abs(dx), near=dist<200 && Math.abs(player.y-e.y)<80;
+
+    // posture: bleeds off when not pressured; a broken enemy is frozen & open
+    if(e.stagger>0){ e.stagger--; }
+    else if(e.posture>0){ e.posture=Math.max(0, e.posture-POSTURE_REGEN); }
 
     // THUG: fast, can dodge away when hit
     // HEAVY: slow, big slam radius
@@ -290,7 +312,8 @@ export function updatePlay(){
     if(e.state==='patrol') e.anim += spd*0.16;
     else if(e.state==='lunge') e.anim += Math.abs(e.vx)*0.14;
 
-    if(e.state==='patrol'){
+    if(e.stagger>0){ /* staggered: no AI, stands open for a deathblow */ }
+    else if(e.state==='patrol'){
       e.x+=e.dir*spd; if(e.x<e.min)e.dir=1; if(e.x>e.max)e.dir=-1;
       if(near){
         e.dir=dx>0?1:-1;
@@ -334,20 +357,36 @@ export function updatePlay(){
 
     // combo swings gate per-swing (each connects once); ult gates on time
     const eGate = player.ult>4 ? e.hitT===0 : e.lastAtkId!==player.atkId;
-    if(hb && eGate && over(hb,e)){
+    if(hb && eGate && !player.deathblow && over(hb,e)){
       if(player.ult<=4) e.lastAtkId=player.atkId;
-      const d=player.ult>4?(e.type==='heavy'?ULT_DMG_HEAVY:ULT_DMG_NORMAL):hbDmg;
-      e.hp-=d; e.hitT=14; state.hitstop=Math.max(state.hitstop, player.ult>4?3:hbStop);
-      e.x+=player.facing*(player.ult>4?12:hbKb);
-      sfx('hit'); shakeScreen(hbHeavy?5:3);
-      burst(e.x+e.w/2, e.y+e.h/2, hbHeavy?14:9,
-        {col:'#ffd9a0', speed:hbHeavy?5.5:4, life:hbHeavy?24:18, angle:player.facing>0?0:Math.PI, spread:2.6});
-      registerComboHit();
-      // THUG tries to dodge when hit
-      if(e.type==='thug' && e.hp>0 && e.dodgeCd===0 && Math.random()<0.45){
-        e.x+=e.dir*-40; e.dodgeCd=40; e.state='recover'; e.timer=28;
+      if(e.stagger>0){
+        triggerDeathblow(e);                              // finisher on a broken enemy
+      } else {
+        const playerSide = player.x<e.x ? -1 : 1;         // dir from enemy toward the player
+        // enemies BLOCK frontal hits while not attacking → chip posture, no HP
+        const blocking = player.ult<=4 && e.dir===playerSide && (e.state==='patrol'||e.state==='recover');
+        if(blocking){
+          e.blockFlash=8; addPosture(e,POSTURE_BLOCK);
+          e.hitT=10; state.hitstop=Math.max(state.hitstop,2); e.x+=player.facing*3;
+          sfx('parry'); shakeScreen(2);
+          burst(e.x+(playerSide<0?e.w:0), e.y+24, 7, {col:'#cbd3dd', speed:4, life:12, spread:6.283});
+          registerComboHit();
+        } else {
+          // clean hit (enemy attacking / caught open / ult): HP + posture
+          const d=player.ult>4?(e.type==='heavy'?ULT_DMG_HEAVY:ULT_DMG_NORMAL):hbDmg;
+          e.hp-=d; addPosture(e,POSTURE_HIT); e.hitT=14;
+          state.hitstop=Math.max(state.hitstop, player.ult>4?3:hbStop);
+          e.x+=player.facing*(player.ult>4?12:hbKb);
+          sfx('hit'); shakeScreen(hbHeavy?5:3);
+          burst(e.x+e.w/2, e.y+e.h/2, hbHeavy?14:9,
+            {col:'#ffd9a0', speed:hbHeavy?5.5:4, life:hbHeavy?24:18, angle:player.facing>0?0:Math.PI, spread:2.6});
+          registerComboHit();
+          if(e.type==='thug' && e.hp>0 && e.dodgeCd===0 && Math.random()<0.45){
+            e.x+=e.dir*-40; e.dodgeCd=40; e.state='recover'; e.timer=28;
+          }
+          if(e.hp<=0) killEnemy(e);
+        }
       }
-      if(e.hp<=0) killEnemy(e);
     }
     for(const k of pthrows){ if(!k.dead && e.hitT===0 && k.x<e.x+e.w&&k.x>e.x&&k.y>e.y&&k.y<e.y+e.h){
       e.hp--; e.hitT=14; state.hitstop=3; k.dead=true; sfx('hit'); if(e.hp<=0) killEnemy(e); } }
@@ -355,7 +394,7 @@ export function updatePlay(){
     const attacking=(e.state==='lunge'||e.state==='leap'||e.state==='slam');
     if(attacking && over(player,e)){
       if(parrying){
-        parrySuccess((player.x+e.x+e.w/2)/2, player.y+28);
+        parrySuccess((player.x+e.x+e.w/2)/2, player.y+28, e);
         // deflect staggers the attacker hard and knocks it back — the reward
         // for a read, and what makes parry preferable to dodging
         e.state='recover'; e.timer=70; e.hitT=14; e.vx=0;
@@ -370,6 +409,8 @@ export function updatePlay(){
   if(boss.alive && boss.active){
     if(boss.hitT>0)boss.hitT--;
     if(boss.enrageFlash>0)boss.enrageFlash--;
+    if(boss.blockFlash>0)boss.blockFlash--;
+    if(boss.stagger>0){ boss.stagger--; } else if(boss.posture>0){ boss.posture=Math.max(0,boss.posture-POSTURE_REGEN*0.7); }
 
     // Phase transitions
     const hpPct=boss.hp/boss.maxHp;
@@ -386,7 +427,8 @@ export function updatePlay(){
 
     const dx=player.x-boss.x; boss.dir=dx>0?1:-1;
     const spd = (boss.phase===3?2.2:boss.phase===2?1.7:1.3) * diff().enemySpeed;
-    // approach speed
+    // approach speed — frozen and open while posture-broken
+    if(boss.stagger<=0){
     if(boss.state==='wait'){
       if(Math.abs(dx)>120){ boss.x+=boss.dir*spd; boss.anim+=spd*0.13; }
       if(--boss.timer<=0){
@@ -419,7 +461,7 @@ export function updatePlay(){
       boss.x+=boss.dir*dspd; boss.anim+=dspd*0.12;
       if(over(player,boss)){
         if(parrying){
-          parrySuccess((player.x+boss.x+boss.w/2)/2, player.y+28);
+          parrySuccess((player.x+boss.x+boss.w/2)/2, player.y+28, boss, true);
           boss.state='wait';boss.timer=60; boss.x-=boss.dir*20;
         }
         else if(!invuln()) hurtPlayer(boss.dir,1);
@@ -446,7 +488,7 @@ export function updatePlay(){
         // leap is now deflectable too, so every boss move answers to parry
         if(parrying && !boss.leapParried){
           boss.leapParried=true;
-          parrySuccess((player.x+boss.x+boss.w/2)/2, player.y+28);
+          parrySuccess((player.x+boss.x+boss.w/2)/2, player.y+28, boss, true);
           boss.vx=-boss.dir*3;
         }
         else if(!invuln()&&!parrying) hurtPlayer(boss.dir,1);
@@ -476,7 +518,7 @@ export function updatePlay(){
       const spinHb={x:boss.x-16,y:boss.y-8,w:boss.w+32,h:boss.h+8};
       if(over(player,spinHb)){
         if(parrying){
-          parrySuccess((player.x+boss.x+boss.w/2)/2, player.y+28);
+          parrySuccess((player.x+boss.x+boss.w/2)/2, player.y+28, boss, true);
           boss.state='wait';boss.timer=70;boss.spinT=0; boss.x-=boss.dir*24;
         }
         else if(!invuln()) hurtPlayer(boss.dir,2);
@@ -500,13 +542,17 @@ export function updatePlay(){
         boss.state='wait'; boss.timer=85;
       }
     }
+    }  // end boss.stagger<=0 gate
 
     boss.x=Math.max(4520,Math.min(WORLD-80,boss.x));
 
     const bGate = player.ult>4 ? boss.hitT===0 : boss.lastAtkId!==player.atkId;
     if(hb && bGate && over(hb,boss)){
       if(player.ult<=4) boss.lastAtkId=player.atkId;
-      const d=player.ult>4?ULT_DMG_BOSS:hbDmg;
+      // staggered boss takes DOUBLE damage (the deathblow window); posture builds otherwise
+      const base=player.ult>4?ULT_DMG_BOSS:hbDmg;
+      const d=boss.stagger>0?base*2:base;
+      if(boss.stagger<=0) addPosture(boss, POSTURE_HIT, true);
       boss.hp-=d; boss.hitT=16; state.hitstop=Math.max(6,hbStop);
       boss.x+=player.facing*(hbHeavy?4:2); sfx('hit');
       registerComboHit();

@@ -28,32 +28,31 @@ export const ULT_DMG_NORMAL = 4;   // was 9
 export const ULT_DMG_HEAVY  = 3;   // was 6
 export const ULT_DMG_BOSS   = 2;   // was 3
 
-/* ---- COMBO SYSTEM (ground strings, DMC-lite) ----
-   Two attack buttons: Light (J) and Heavy (K). Moves chain into one another when
-   the next input arrives inside the current move's `cancel` window. All timing is
-   frame counts @60Hz, same discipline as the rest of the game.
-     dur   total frames of the move
-     a0,a1 active hitbox window (frames from move start)
-     dmg   damage on hit         kb    knockback pixels
-     hitstop freeze on hit       cancel frame after which you may chain
-     next  {L:move, H:move} — which move each button leads to from here
-     heavy overhead chop (bigger, slower)   lunge forward drift during active
-     finisher last hit of a string (bigger fx)
-   Openers: Light => L1, Heavy => H1. Light string L1->L2->L3, any light can be
-   cut into a Heavy finisher (HF) for a knockback ender. */
+/* ---- COMBO SYSTEM (light-only khukuri strings) ----
+   One attack button (Left mouse). Each press chains to the next move inside the
+   current move's `cancel` window. Frame counts @60Hz. The three hits are visually
+   distinct — a poke, a side swing, then a rising finisher — not one canned swing.
+     dur total frames   a0,a1 active hitbox window   dmg/kb   hitstop freeze on hit
+     cancel frame after which you may chain   reach hitbox length
+     kind  'poke'|'side'|'rise' — drives the pose/arc in render.js
+   String: L1(poke) -> L2(side swing) -> L3(rising finisher). */
 export const MOVES = {
-  L1: {dur:13, a0:3,  a1:8,  dmg:1, kb:5,  hitstop:3, reach:58, cancel:6,  next:{L:'L2', H:'HF'}},
-  L2: {dur:13, a0:3,  a1:8,  dmg:1, kb:6,  hitstop:3, reach:60, cancel:6,  next:{L:'L3', H:'HF'}},
-  L3: {dur:20, a0:5,  a1:12, dmg:2, kb:12, hitstop:5, reach:70, cancel:12, next:{H:'HF'}, finisher:true},
-  H1: {dur:28, a0:11, a1:20, dmg:3, kb:17, hitstop:6, reach:80, cancel:17, next:{L:'L1'}, heavy:true, lunge:1.3},
-  HF: {dur:28, a0:10, a1:20, dmg:3, kb:21, hitstop:7, reach:86, cancel:17, heavy:true, finisher:true, lunge:1.6},
-  // IAI-JUTSU (key O): sheathed coil, then a single lightning draw-cut. Long
-  // reach, dashes forward through the strike (i-frames), big knockback + flash.
-  // Not chainable (cancel past its length); gated by a cooldown, not free-spam.
-  IAI:{dur:36, a0:17, a1:24, dmg:4, kb:26, hitstop:9, reach:120, cancel:99, heavy:true, iai:true, lunge:7, sfx:'slash'}
+  L1: {dur:12, a0:2, a1:6,  dmg:1, kb:5,  hitstop:3, reach:66, cancel:6,  next:{L:'L2'}, kind:'poke'},
+  L2: {dur:13, a0:3, a1:8,  dmg:1, kb:7,  hitstop:3, reach:60, cancel:6,  next:{L:'L3'}, kind:'side'},
+  L3: {dur:18, a0:5, a1:11, dmg:2, kb:13, hitstop:5, reach:66, cancel:12, finisher:true, kind:'rise'}
 };
 export const COMBO_GAP = 42;   // frames of no hits before the combo counter resets
-export const IAI_COOLDOWN = 100;   // frames between iai-jutsu uses
+
+/* ---- POSTURE / DEATHBLOW (Sekiro-flavoured) ----
+   Enemies block your attacks (chip posture, little HP). Parrying THEIR attacks
+   deals big posture damage. When posture fills they STAGGER (vulnerable) — a hit
+   then is a DEATHBLOW (instant kill for mooks; big damage window for the boss). */
+export const STAGGER_FRAMES = 130;   // how long a broken enemy stays open
+export const POSTURE_REGEN   = 0.03;  // posture bled off per frame when not pressured
+export const POSTURE_HIT      = 0.8;   // posture from a clean (unblocked) hit
+export const POSTURE_BLOCK    = 1.3;   // posture from a blocked hit (no HP)
+export const POSTURE_PARRY    = 2.6;   // posture from deflecting their attack (the fast route)
+export const DEATHBLOW_FRAMES = 24;    // player deathblow animation length
 
 /* ---- DIFFICULTY (two modes, numbers only — combat depth is identical) ----
    Chosen on the intro screen (1 = Casual, 2 = Warrior). `diff()` in state.js

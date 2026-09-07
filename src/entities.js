@@ -10,7 +10,8 @@ export const player={x:60,y:GROUND-58,w:28,h:58,vx:0,vy:0,onGround:false,facing:
   mv:null,        // the MOVES[...] object for the current move
   atkT:0,         // frames elapsed in the current move
   atkId:0,        // unique id per swing — one hit per target per swing
-  iaiCd:0,        // iai-jutsu cooldown
+  deathblow:0,    // deathblow animation timer
+  dbTarget:null,  // enemy being deathblown
   buffer:null,    // buffered next input ('L'/'H') to chain at the cancel window
   comboCount:0,   // hits landed in the current chain (HUD counter)
   comboTimer:0,   // frames until the combo counter resets
@@ -45,6 +46,7 @@ export function cadre(x, type){
     state:'patrol',move:'lunge',timer:0,hitT:0,alive:true,
     min:x-100,max:x+100,spawn:false,
     dodgeCd:0, dodged:false, lastAtkId:-1,
+    posture:0, maxPosture: t2==='heavy'?5:t2==='thug'?2:3, stagger:0, blockFlash:0,
     anim:Math.random()*6.28};   // walk-cycle phase, desynced per enemy
 }
 
@@ -61,7 +63,8 @@ export const enemies=makeEnemies();
 /* ---- Boss — 3 phases, 18 HP ---- */
 export const boss={x:4760,y:GROUND-96,w:60,h:96,hp:18,maxHp:18,dir:-1,state:'wait',
   timer:60,hitT:0,alive:true,active:false,phase:1,vx:0,vy:0,summoned:0,
-  spinT:0,rageT:0,enrageFlash:0,stomp:0,anim:0,lastAtkId:-1};
+  spinT:0,rageT:0,enrageFlash:0,stomp:0,anim:0,lastAtkId:-1,
+  posture:0,maxPosture:12,stagger:0,blockFlash:0};
 export const cage={x:5040,y:GROUND-70};
 // cs.i = index of the dialogue line currently on screen (player-advanced)
 export const cs={t:0,i:0,muna:{x:4980,y:GROUND-52},raju:{x:5260,y:GROUND-52},hari:{x:4760},rajuIn:false};

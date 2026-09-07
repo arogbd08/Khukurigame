@@ -28,8 +28,8 @@ export function drawCredits(){
     const a=Math.min(1,Math.max(0,(t-90)/70));
     ctx.globalAlpha=a*0.9;
     ctx.fillStyle='#9fb0c8'; ctx.font='italic 13px "Segoe UI",system-ui';
-    ctx.fillText('Muna gai. Hari eklo thiyo.',W/2,290);
-    ctx.fillText('Tara hajurbubako khukuri ajhai thiyo. Tyahi kaafi cha.',W/2,310);
+    ctx.fillText('Muna gai. Hari eklo bhayo.',W/2,290);
+    ctx.fillText('Ani Farkyo u tei gaun ma ',W/2,310);
     ctx.globalAlpha=1;
   }
 

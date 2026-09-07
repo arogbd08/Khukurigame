@@ -118,7 +118,50 @@ src/
 - Layered parallax background: sun w/ god rays, 2 cloud bands, 3 ridgelines w/ snowcaps,
   haze bands, birds, stupa, houses w/ chimney smoke, prayer flags, terraced hills, pines, dust motes.
 
-## TODO / not done
+## Controls (current — 2026-09-07)
+Move A/D · jump W/Space · dodge Shift · **Left-click = attack** (light combo string) ·
+**Right-click = parry** · **E = ult (iai-jutsu)** · F free Muna · R restart · M mute · 1/2 difficulty on intro.
+On-page control text is intentionally REMOVED from index.html. Mouse handling is in main.js
+`wireInput` (contextmenu prevented; button0=light, button2=parry).
+
+## Weapons (2026-09-07, from user reference images)
+- **Khukuri** = Hari's normal blade (`khukuriBlade()` in render.js): forward-drooping heavy belly,
+  down-curved tip, inner edge bevel, brown wooden handle + metal bolster, cho notch. `KH_LEN=34`.
+- **Katana** = the ult/iai only (`katanaBlade()`): silver sori blade, wavy hamon, gold fittings
+  (kashira/fuchi/tsuba/habaki), black tsuka with RED diamond ito wrap. `BLADE_LEN=42`.
+- **Saya** (`drawSaya()`): katana scabbard worn on the left hip always — black lacquer, gold
+  panels, red sageo tassel. Holds the katana normally; empty during the ult (blade in hand).
+- Combos are LIGHT-ONLY now (heavy removed) and choreographed as poke → side-swing → rising
+  finisher (POSE table), mostly horizontal. Khukuri THROW + its ammo/drops REMOVED (pthrows array
+  kept only for parry-deflected enemy projectiles). HUD shows "iai:" charges, no ammo row.
+- Ult = **iai-jutsu** (E, costs 1 charge): katana down→up rising draw-cut, dashes forward with
+  i-frames, same damage as the old ult (ULT_DMG_*). Down→up pose computed in drawHari from p.ult.
+- Parry FX = small ORANGE spark burst (parrySuccess), NO shield semicircle arc anymore.
+
+## Posture / deathblow (Wave 2 DONE 2026-09-07)
+Sekiro-style, config consts STAGGER_FRAMES/POSTURE_* /DEATHBLOW_FRAMES.
+- Enemy + boss have `posture`,`maxPosture`,`stagger`,`blockFlash` (entities.js). Player has
+  `deathblow`,`dbTarget`.
+- Enemies BLOCK frontal hits while patrol/recover (e.dir===playerSide) → no HP, +POSTURE_BLOCK,
+  grey clash arc. Hitting an attacking/behind/exposed enemy = clean HP + POSTURE_HIT. Parrying
+  their attack = +POSTURE_PARRY (fast route) — parrySuccess now takes (x,y,target,isBoss).
+- Posture bleeds off (POSTURE_REGEN) when not pressured. Fill → breakPosture() → e.stagger set,
+  enemy AI frozen (gated by `if(e.stagger<=0)`). Hitting a staggered MOOK → triggerDeathblow()
+  → player.deathblow anim (khukuri lunge thrust) → killEnemy at end. Boss does NOT instakill:
+  staggered boss takes DOUBLE damage + can't act (boss AI wrapped in `if(boss.stagger<=0)`).
+- Render: per-enemy posture bar + red ▼ stagger marker (drawEnemy); boss posture bar under HP bar
+  + "SUSTAYO — prahar gara!" prompt; deathblow thrust pose + iai crouch (render.js drawHari:
+  `dbActive`, `crouch`). Verified headless: hit→posture→stagger→deathblow kills; parry 0→2.6.
+
+## TODO / not done (this multi-part request, in waves)
+- Wave 1 DONE: controls remap, khukuri+katana, ult=iai, FX, horizontal combos.
+- Wave 2 DONE: posture bar + block + deathblow (above) + iai crouch stance from ref image.
+- Wave 3 NOT DONE: action-gated **tutorial** phase with **on-screen control prompts** (teach each
+  mechanic incl. parry/deathblow; advance when the player performs it); practice dummies.
+- Wave 4 NOT DONE: **Aunty NPC** after tutorial before boss ("babu muna lai ta mantri le jungle ma
+  lageko cha re, abui k garne hola"), then a **village→jungle** transition via gate-climb platforming.
+- Level 2 plan delivered verbally (jungle "Ban": archer/spearman/beast enemies, rope-bridge
+  setpiece, Maobadi commander mini-boss, reconciles Mantri/Maobadi naming).
 - Feel-work pass (2026-08-29/30) is DONE: Phaser migration, 2 difficulties, combo system,
   parry+attack animation polish, de-stiffened enemies/boss. All verified headless (see below).
 - Scope chosen by user: combos = **ground strings only** (no aerial juggle / no style meter);
