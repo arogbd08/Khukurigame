@@ -65,6 +65,9 @@ function wireInput(scene){
     }
     if((e.code==='KeyW'||e.code==='Space') && !e.repeat) input.jumpQ=true;
     if(e.code==='KeyE' && !e.repeat) input.ultQ=true;      // ult = iai-jutsu draw
+    if(e.code==='Keyu' && !e.repeat) input.ultQ=true; 
+    if(e.code==='KeyJ' && !e.repeat) input.lightQ=true;    // keyboard equivalent of Left Click (attack)
+    if(e.code==='KeyK' && !e.repeat) input.parryQ=true;    // keyboard equivalent of Right Click (parry)  
     if(e.code==='KeyF' && !e.repeat) input.freeQ=true;
     if((e.code==='ShiftLeft'||e.code==='ShiftRight') && !e.repeat) input.dodgeQ=true;
     if(e.code==='KeyR') reset();
