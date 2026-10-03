@@ -1,8 +1,9 @@
-import {ctx} from '../canvas.js';
-import {W, H, GROUND} from '../config.js';
-import {state, say, sub} from '../state.js';
-import {sfx, stopBgm, resumeBgm} from '../audio.js';
-import {cs, cage, player} from '../entities.js';
+import {ctx} from '../canvas.js?v=20261002-23';
+import {W, H, GROUND} from '../config.js?v=20261002-23';
+import {state, say, sub, shakeScreen, flashScreen} from '../state.js?v=20261002-23';
+import {sfx, cutBgm, resumeBgm} from '../audio.js?v=20261002-23';
+import {cs, cage, player} from '../entities.js?v=20261002-23';
+import {drawControlBadge} from '../render.js?v=20261002-23';
 
 /* Dialogue is player-paced: each line stays up until Enter is pressed.
    `onShow` fires once, when that line first appears. */
@@ -30,15 +31,17 @@ const RAJU_SPEED = 3.2;
 function showLine(i){
   const L=LINES[i];
   if(!L) return;
+  if(i===2){
+    cutBgm();cs.shock=78;shakeScreen(8);flashScreen(8);sfx('shock');
+  }
   say(L.t, 9999, L.c);   // sticky — only Enter clears it
   if(L.onShow) L.onShow();
 }
 
 export function enterCutscene(){
-  state.scene='cutscene'; cs.t=0; cs.i=0;
-  cs.hari.x=player.x; cs.muna.x=cage.x; cs.muna.y=GROUND-52;
-  cs.raju.x=cage.x+240; cs.raju.y=GROUND-52; cs.rajuIn=false; sfx('sad');
-  stopBgm();   // the rejection plays out in silence
+  state.scene='cutscene'; cs.t=0; cs.i=0;cs.shock=0;
+  cs.hari.x=player.x; cs.muna.x=cage.x; cs.muna.y=cage.y;
+  cs.raju.x=cage.x+240; cs.raju.y=cage.y; cs.rajuIn=false;cs.rajuArrived=false;sfx('scene_whoosh');
   showLine(0);
 }
 
@@ -55,6 +58,9 @@ export function advanceCutscene(){
 
 export function updateCutscene(){
   cs.t++;   // still ticks, for idle animation and the prompt blink
+  if(cs.shock>0)cs.shock--;
+  if(state.flash>0)state.flash--;
+  if(state.shake>0)state.shake*=0.78;
 
   // Raju saunters in and stops beside Muna
   if(cs.rajuIn && cs.i<LEAVE_FROM){
@@ -63,23 +69,22 @@ export function updateCutscene(){
     // Failsafe: the player can mash Enter faster than he can walk. He must not
     // deliver his line from off-camera, so snap him in once it's his turn.
     if(cs.i>=RAJU_SPEAKS && cs.raju.x>target) cs.raju.x=target;
+    if(cs.raju.x<=target&&!cs.rajuArrived){cs.rajuArrived=true;sfx('paper');}
   }
   // once Hari is left with his one word, the two of them stroll off
   if(cs.i>=LEAVE_FROM){ cs.muna.x+=1.7; cs.raju.x+=1.7; }
 }
 
-/* Blinking "press Enter" affordance, pinned to the right edge of the
-   subtitle bar so it reads as part of the dialogue box. */
+/* Blinking Action affordance, pinned to the right edge of the subtitle bar. */
 export function drawCutscenePrompt(){
   if(state.scene!=='cutscene') return;
   const a=0.45+0.55*Math.abs(Math.sin(cs.t/16));
   ctx.save();
   ctx.globalAlpha=a;
-  ctx.textAlign='right';
-  ctx.fillStyle='#9fe06a';
-  ctx.font='bold 12px system-ui';
-  const label = cs.i>=LINES.length-1 ? 'Enter ▸ credits' : 'Enter ▸';
-  ctx.fillText(label, W/2+300, H-12);
+  const controller=state.controlMode==='controller',key=controller?'✕':'Enter';
+  drawControlBadge(key,W-86,39,controller,.9);
+  ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillStyle='#9fe06a';ctx.font='bold 11px system-ui';
+  ctx.fillText('Action',W-66,39);
   ctx.restore();
   ctx.textAlign='left';
 }

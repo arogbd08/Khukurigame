@@ -7,29 +7,58 @@
      - All rendering stays procedural Canvas 2D in render.js / the scenes. Those
        draw into the offscreen `cv` (canvas.js); Phaser shows `cv` as a live
        texture and re-uploads it each frame via texture.refresh().
-   Input stays on DOM listeners: the edge-trigger (`!e.repeat`) timing and the
-   first-gesture audio unlock are exact and browser-correct as-is. */
-import {cv} from './canvas.js';
-import {W, H} from './config.js';
-import {state, keys, input} from './state.js';
-import {audio, resumeAudio, startBgm, syncBgmMute} from './audio.js';
-import {updateIntro, drawIntro} from './scenes/BootScene.js';
-import {updatePlay, drawWorld, reset} from './scenes/GameScene.js';
-import {updateCutscene, advanceCutscene, drawCutscenePrompt} from './scenes/CutsceneScene.js';
-import {drawCredits} from './scenes/CreditsScene.js';
-import {drawHUD, drawSubtitle, drawToasts} from './render.js';
+   Keyboard/mouse input stays on DOM listeners; gamepads are polled once per
+   rendered frame and their action buttons are edge-triggered. */
+import {cv,ctx} from './canvas.js?v=20261002-23';
+import {W, H} from './config.js?v=20261002-23';
+import {state, keys, pad, input, clearQueued} from './state.js?v=20261002-23';
+import {audio, resumeAudio, startBgm, syncBgmMute} from './audio.js?v=20261002-23';
+import {updateIntro, drawIntro, handleIntroKey, handleIntroGamepad, handleIntroClick, setIntroPointer} from './scenes/BootScene.js?v=20261002-23';
+import {updatePlay, drawWorld, reset} from './scenes/GameScene.js?v=20261002-23';
+import {updateCutscene, advanceCutscene, drawCutscenePrompt} from './scenes/CutsceneScene.js?v=20261002-23';
+import {drawCredits} from './scenes/CreditsScene.js?v=20261002-23';
+import {drawHUD, drawSubtitle, drawToasts} from './render.js?v=20261002-23';
 
 const STEP = 1000/60;          // fixed logic tick (ms)
 const MAX_STEPS = 5;           // clamp catch-up so a stall can't spiral
+let lastControlsMarkup='';
+function syncControlsStrip(){
+  const row=document.getElementById('controls-items');
+  const title=document.getElementById('controls-title');
+  if(!row)return;
+  const controller=state.controlMode==='controller';
+  const ne=state.language!=='en';
+  const label=(en,np)=>ne?np:en;
+  const rows=controller?[
+    [['LS / D-pad',label('Move','hidne')],['✕','Jump / Action']],
+    [['○',label('Dodge','dodge')],['△','Ultimate']],
+    [['□',label('Attack','prahar')],['L1',label('Block','rokne')]]
+  ]:[
+    [['A / D',label('Move','hidne')],['W / Space',label('Jump','chhalne')]],
+    [['Shift',label('Dodge','dodge')],['E','Ultimate']],
+    [['Enter','Action'],['Right-click',label('Block','rokne')]],
+    [['Click',label('Attack','prahar')]]
+  ];
+  const faces={'✕':'cross','□':'square','○':'circle','△':'triangle'};
+  const markup=rows.map(pair=>`<div class="controls-pair">${pair.map(([key,name])=>{
+    const badge=controller&&faces[key]
+      ?`<span class="control-key face ${faces[key]}">${key}</span>`
+      :`<kbd class="control-key ${controller?'pad-key':''}">${key}</kbd>`;
+    return `<span class="control-entry">${badge}<span>${name}</span></span>`;
+  }).join('')}</div>`).join('');
+  if(title)title.textContent=controller?'CONTROLS  ·  CONTROLLER':'CONTROLS  ·  KEYBOARD';
+  if(markup!==lastControlsMarkup){row.innerHTML=markup;lastControlsMarkup=markup;}
+}
 
 function startGame(){
   audio(); resumeAudio(); startBgm();
+  state.openingFade=30;
   state.scene='play'; reset();
 }
 
 /* ---- fixed-step logic dispatch (identical to the old setInterval loop) ---- */
 function step(){
-  if(state.scene==='intro'){ updateIntro(); return; }
+  if(state.scene==='intro'){ if(updateIntro())startGame(); return; }
   // cutscene lines are sticky until Enter — no sub.t decay here
   if(state.scene==='cutscene'){ updateCutscene(); return; }
   if(state.scene==='credits'){ return; }
@@ -41,10 +70,12 @@ function draw(){
   if(state.scene==='intro'){ drawIntro(); return; }
   if(state.scene==='credits'){ drawCredits(); return; }
   drawWorld();
-  drawHUD();
-  drawToasts();
+  if(state.scene==='cutscene'){
+    drawSubtitle();drawCutscenePrompt();return;
+  }
+  drawHUD();drawToasts();
   drawSubtitle();
-  drawCutscenePrompt();
+  if(state.openingFade>0){ctx.fillStyle=`rgba(0,0,0,${state.openingFade/30})`;ctx.fillRect(0,0,W,H);state.openingFade--;}
 }
 
 /* ================= INPUT (DOM — preserved verbatim from the pre-Phaser build) ================= */
@@ -52,36 +83,107 @@ function wireInput(scene){
   addEventListener('keydown',e=>{
     if(['Space','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
     startBgm();   // first gesture unblocks autoplay; no-op afterwards
-    // intro: pick difficulty (1 Casual / 2 Warrior) or start on the default
+    if(!state.controlModeChosen)state.controlMode='keyboard';
+    // Title → language → difficulty → player-paced cinematic.
     if(state.scene==='intro'){
-      if(e.code==='Digit1'||e.code==='Numpad1'){ state.difficulty='casual';  return startGame(); }
-      if(e.code==='Digit2'||e.code==='Numpad2'){ state.difficulty='warrior'; return startGame(); }
-      if(e.code==='Enter'||e.code==='Space') return startGame();
+      if(!e.repeat)handleIntroKey(e.code);
+      return;
     }
     // cutscene dialogue is player-paced — Enter steps to the next line
     if(state.scene==='cutscene'){
       if(e.code==='Enter' && !e.repeat) advanceCutscene();
       if(e.code!=='KeyR' && e.code!=='KeyM') return;
     }
+    if(state.scene==='play'&&e.code==='Enter'&&!e.repeat) input.actionQ=true;
     if((e.code==='KeyW'||e.code==='Space') && !e.repeat) input.jumpQ=true;
     if(e.code==='KeyE' && !e.repeat) input.ultQ=true;      // ult = iai-jutsu draw
-    if(e.code==='KeyF' && !e.repeat) input.freeQ=true;
     if((e.code==='ShiftLeft'||e.code==='ShiftRight') && !e.repeat) input.dodgeQ=true;
     if(e.code==='KeyR') reset();
     if(e.code==='KeyM' && !e.repeat){ state.muted=!state.muted; syncBgmMute(); }
     keys[e.code]=true;
   });
   addEventListener('keyup',e=>keys[e.code]=false);
-  // Mouse combat: Left = attack, Right = parry. (Left also starts the game on the intro.)
+  const releaseControls=()=>{
+    for(const code in keys)keys[code]=false;
+    pad.left=pad.right=false;
+    previousPadButtons.fill(false);previousPadLeft=previousPadRight=false;
+    clearQueued();
+  };
+  addEventListener('blur',releaseControls);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseControls();});
+  // Mouse combat: Left = attack, Right = parry. Intro/menu clicks are handled separately.
   const cvEl = scene.game.canvas;
   cvEl.addEventListener('contextmenu', e=>e.preventDefault());   // right-click parries, no menu
+  const introPoint=e=>{
+    const r=cvEl.getBoundingClientRect();
+    return {x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*H/r.height};
+  };
+  cvEl.addEventListener('mousemove',e=>{const p=introPoint(e);setIntroPointer(p.x,p.y);});
   cvEl.addEventListener('mousedown', e=>{
     startBgm();
-    if(state.scene==='intro'){ if(e.button===0) startGame(); return; }
+    if(!state.controlModeChosen)state.controlMode='keyboard';
+    if(state.scene==='intro'){
+      if(e.button===0){const p=introPoint(e);handleIntroClick(p.x,p.y);}
+      return;
+    }
     if(state.scene==='cutscene' || state.scene==='credits') return;
     if(e.button===0) input.lightQ=true;
     else if(e.button===2){ e.preventDefault(); input.parryQ=true; }
   });
+}
+
+// Standard Gamepad mapping uses PS button labels in the UI on every controller.
+// Movement is held; combat/menu actions are edge-triggered once per press.
+const previousPadButtons=[];
+let previousPadLeft=false,previousPadRight=false,activePadIndex=null;
+function pollGamepad(){
+  let pads=null;
+  try{pads=typeof navigator!=='undefined'&&navigator.getGamepads?navigator.getGamepads():null;}catch(_){pads=null;}
+  const connected=pads?Array.from(pads).filter(p=>p&&p.connected):[];
+  const isActive=p=>{
+    const axes=p.axes||[];
+    return Array.from(axes).some(v=>Math.abs(v||0)>.2)||Array.from(p.buttons||[]).some(b=>b&&(b.pressed||b.value>.25));
+  };
+  const controller=connected.find(p=>p.index===activePadIndex&&isActive(p))
+    ||connected.find(isActive)
+    ||connected.find(p=>p.index===activePadIndex)
+    ||connected[0];
+  if(!controller){
+    pad.left=pad.right=false;previousPadButtons.length=0;previousPadLeft=previousPadRight=false;activePadIndex=null;return;
+  }
+  if(controller.index!==activePadIndex){
+    activePadIndex=controller.index;previousPadButtons.length=0;previousPadLeft=previousPadRight=false;
+  }
+  const down=i=>!!(controller.buttons[i]&&(controller.buttons[i].pressed||controller.buttons[i].value>0.5));
+  const pressed=i=>{const now=down(i),was=!!previousPadButtons[i];previousPadButtons[i]=now;return now&&!was;};
+  const axis=controller.axes&&Number.isFinite(controller.axes[0])?controller.axes[0]:0;
+  const left=axis<-.25||down(14),right=axis>.25||down(15);
+  const leftEdge=left&&!previousPadLeft,rightEdge=right&&!previousPadRight;
+  previousPadLeft=left;previousPadRight=right;pad.left=left;pad.right=right;
+
+  const cross=pressed(0),circle=pressed(1),square=pressed(2),triangle=pressed(3);
+  const l1=pressed(4);
+  const usedController=cross||circle||square||triangle||l1||leftEdge||rightEdge;
+  if(usedController){
+    startBgm();
+    if(!state.controlModeChosen)state.controlMode='controller';
+  }
+  if(state.scene==='intro'){
+    if(leftEdge)handleIntroGamepad('left');
+    if(rightEdge)handleIntroGamepad('right');
+    if(cross)handleIntroGamepad('confirm');
+    return;
+  }
+  if(state.scene==='cutscene'){
+    if(cross)advanceCutscene();
+    return;
+  }
+  if(state.scene!=='play')return;
+  if(cross){input.jumpQ=true;input.actionQ=true;}
+  if(square)input.lightQ=true;
+  if(circle)input.dodgeQ=true;
+  if(l1)input.parryQ=true;
+  if(triangle)input.ultQ=true;
 }
 
 /* ================= PHASER SCENE ================= */
@@ -95,6 +197,8 @@ class MainScene extends Phaser.Scene {
     wireInput(this);
   }
   update(time, delta){
+    pollGamepad();
+    syncControlsStrip();
     this.acc += delta;
     let n=0;
     while(this.acc >= STEP && n < MAX_STEPS){ step(); this.acc -= STEP; n++; }
@@ -105,6 +209,7 @@ class MainScene extends Phaser.Scene {
 }
 
 /* ================= GAME ================= */
+syncControlsStrip();
 new Phaser.Game({
   type: Phaser.AUTO,
   width: W,

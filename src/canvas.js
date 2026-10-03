@@ -1,4 +1,4 @@
-import {W, H} from './config.js';
+import {W, H} from './config.js?v=20261002-23';
 
 /* Offscreen buffer that all procedural rendering draws into.
    Phaser displays this canvas as a live texture (see main.js) — it is no longer

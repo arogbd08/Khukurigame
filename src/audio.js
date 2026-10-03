@@ -1,4 +1,4 @@
-import {state} from './state.js';
+import {state} from './state.js?v=20261002-23';
 
 /* ================= AUDIO — REALISTIC SOUNDS ================= */
 let AC = null;
@@ -183,6 +183,21 @@ export function sfx(k){
       flt.connect(g); g.connect(out); ns.start(); ns.stop(now+0.22);
       break; }
 
+    case 'scene_whoosh': {
+      // Quiet low-passed breath of air for the shift into the ending scene.
+      const {src:ns,out:flt}=makeNoise(ac,0.75,900);
+      const g=ac.createGain();env(ac,g.gain,0.18,0.12,0.4,0.075);
+      flt.connect(g);g.connect(out);ns.start();ns.stop(now+0.78);
+      break; }
+
+    case 'yak_snort': {
+      // Soft breath and a dry hoof-like thump to telegraph the charge.
+      const o=osc(ac,116,'triangle',0.18,74);const g=ac.createGain();
+      env(ac,g.gain,0.003,0.04,0.16,0.2);o.connect(g);g.connect(out);
+      const {src:ns,out:flt}=makeNoise(ac,0.12,520);const ng=ac.createGain();
+      env(ac,ng.gain,0.002,0.018,0.09,0.13);flt.connect(ng);ng.connect(out);ns.start();ns.stop(now+0.13);
+      break; }
+
     case 'sad': {
       [330,370,392].forEach((f,i)=>{
         const o=osc(ac,f,'sine',0.8); const g=ac.createGain();
@@ -190,6 +205,19 @@ export function sfx(k){
         g.gain.exponentialRampToValueAtTime(0.001,now+i*0.08+0.78);
         o.connect(g); g.connect(out);
       });
+      break; }
+
+    case 'shock': {
+      // Sudden low heartbeat thud with a thin glassy sting: a brief emotional
+      // punctuation, not a loud jump scare.
+      [0,0.12].forEach((delay,i)=>{
+        const o=osc(ac,i?52:68,'sine',0.24,i?34:42);const g=ac.createGain();
+        g.gain.setValueAtTime(0,now+delay);g.gain.linearRampToValueAtTime(i?0.22:0.34,now+delay+0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001,now+delay+0.22);o.connect(g);g.connect(out);
+      });
+      const o=osc(ac,920,'sine',0.32,430);const g=ac.createGain();
+      g.gain.setValueAtTime(0,now);g.gain.linearRampToValueAtTime(0.12,now+0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001,now+0.30);o.connect(g);g.connect(out);
       break; }
 
     case 'rizz': {
@@ -289,6 +317,10 @@ export function startBgm(){
 
 // Cutscene plays in silence; resumeBgm() brings it back for the credits.
 export function stopBgm(){ bgmSuspended = true; applyBgm(); }
+export function cutBgm(){
+  bgmSuspended=true;clearInterval(fadeTimer);fadeTimer=null;
+  if(bgm){bgm.volume=0;bgm.pause();}
+}
 export function resumeBgm(){ bgmSuspended = false; if(!bgm) startBgm(); else applyBgm(); }
 
 // Called after the mute key toggles state.muted.

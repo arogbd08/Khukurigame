@@ -2,7 +2,7 @@
 export const W = 820;
 export const H = 420;
 export const GROUND = H - 40;
-export const WORLD = 5200;
+export const WORLD = 8500;
 
 /* ---- text pacing (frames @ 60fps) ---- */
 // Subtitles auto-size to their text length; these are the floor/ceiling.
@@ -28,9 +28,10 @@ export const ULT_DMG_NORMAL = 4;   // was 9
 export const ULT_DMG_HEAVY  = 3;   // was 6
 export const ULT_DMG_BOSS   = 2;   // was 3
 
-/* ---- COMBO SYSTEM (light-only khukuri strings) ----
-   One attack button (Left mouse). Each press chains to the next move inside the
-   current move's `cancel` window. Frame counts @60Hz. The three hits are visually
+/* ---- COMBO SYSTEM (ground string + aerial down slash) ----
+   Square/left-click attack chains the ground string; the same attack input in
+   the air starts AIR_DOWN. Ground presses chain inside the current move's
+   `cancel` window. Frame counts @60Hz. The three ground hits are visually
    distinct — a poke, a side swing, then a rising finisher — not one canned swing.
      dur total frames   a0,a1 active hitbox window   dmg/kb   hitstop freeze on hit
      cancel frame after which you may chain   reach hitbox length
@@ -39,7 +40,8 @@ export const ULT_DMG_BOSS   = 2;   // was 3
 export const MOVES = {
   L1: {dur:12, a0:2, a1:6,  dmg:1, kb:5,  hitstop:3, reach:66, cancel:6,  next:{L:'L2'}, kind:'poke'},
   L2: {dur:13, a0:3, a1:8,  dmg:1, kb:7,  hitstop:3, reach:60, cancel:6,  next:{L:'L3'}, kind:'side'},
-  L3: {dur:18, a0:5, a1:11, dmg:2, kb:13, hitstop:5, reach:66, cancel:12, finisher:true, kind:'rise'}
+  L3: {dur:18, a0:5, a1:11, dmg:2, kb:13, hitstop:5, reach:66, cancel:12, finisher:true, kind:'rise'},
+  AIR_DOWN: {dur:17, a0:2, a1:9, dmg:2, kb:8, hitstop:4, reach:58, cancel:17, airDown:true, kind:'down'}
 };
 export const COMBO_GAP = 42;   // frames of no hits before the combo counter resets
 
@@ -55,7 +57,7 @@ export const POSTURE_PARRY    = 2.6;   // posture from deflecting their attack (
 export const DEATHBLOW_FRAMES = 24;    // player deathblow animation length
 
 /* ---- DIFFICULTY (two modes, numbers only — combat depth is identical) ----
-   Chosen on the intro screen (1 = Casual, 2 = Warrior). `diff()` in state.js
+   Chosen in the pre-intro menu (1 = Casual, 2 = Warrior). `diff()` in state.js
    returns the active row. dmgMul scales every hit the player TAKES; parryThresh
    is the `parry>` cutoff for the active deflect window (lower = wider/more forgiving);
    enemySpeed scales enemy + boss movement/approach; momoHeal is momos-per-heart;
@@ -65,13 +67,31 @@ export const DIFF = {
   warrior: {label:'Warrior', maxHp:8,  dmgMul:1.4, parryThresh:10, enemySpeed:1.15, momoHeal:6, orbHeal:2}
 };
 
-// platform layout: flat [x,y, x,y, ...] pairs, each 130x14
+// Mustang-style stone terrace steps and the descending entrance to the final cave.
+// House roofs are generated from the actual house dimensions in entities.js.
 export const PLATFORM_LAYOUT = [
-  300,300, 520,250, 760,300, 1000,235, 1240,290, 1480,240, 1720,300, 1980,250,
-  2240,300, 2480,235, 2720,290, 2980,250, 3240,300, 3500,240, 3760,300, 4020,250
+  {x:1510,y:342,w:84,kind:'terrace'}, {x:2390,y:340,w:86,kind:'terrace'},
+  {x:3910,y:339,w:82,kind:'terrace'}
 ];
 
-export const MOMO_X = [330,560,790,1010,1270,1300,1510,1740,1760,2010,2270,2300,2510,2750,3010,3270,3300,3530,3790,4040,4070,4300,4350,4400];
+// Compact clusters of mud-brick houses; flat roofs are real climbable surfaces.
+export const VILLAGE_HOUSES = [
+  [340,1.15],[850,1.1],[1280,1.2],[2200,1.2],[2730,1.15],[3750,1.2],[4120,1.05]
+];
+// Keep all seven houses visible, but only four are solid/climbable route obstacles.
+export const VILLAGE_COLLISION_HOUSES = [[340,1.15],[1280,1.2],[2730,1.15],[3750,1.2]];
+export const STUPA_X=2600, STUPA_SCALE=1.05;
+export const DUNGEON_ENTRY_X=4360, DUNGEON_ENTRY_END=4590;
+export const DUNGEON_FLOOR=GROUND+168, DUNGEON_BOSS_ROOM_START=7380, DUNGEON_BOSS_TRIGGER=7460;
+export const DUNGEON_STEPS=[
+  {x:4350,y:398,w:72,kind:'dungeonStep'}, {x:4435,y:438,w:72,kind:'dungeonStep'},
+  {x:4515,y:480,w:72,kind:'dungeonStep'}
+];
+export const DUNGEON_ALCOVES=[];
+export const DUNGEON_PITS=[[5360,5560]];
+export const GROUND_GAPS=[[1790,1910],[DUNGEON_ENTRY_X,DUNGEON_ENTRY_END],...DUNGEON_PITS];
+
+export const MOMO_X = [330,790,1270,1740,2270,2750,3270,3790,4300,4800,5100,5740,6120,6350,6850,7100,7280,7520,7800];
 
 export const introLines = [
   'Euta dukhad katha.',

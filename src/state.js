@@ -1,4 +1,5 @@
-import {SUB_MIN_FRAMES, SUB_PER_CHAR, SUB_MAX_FRAMES, DIFF} from './config.js';
+import {SUB_MIN_FRAMES, SUB_PER_CHAR, SUB_MAX_FRAMES, DIFF} from './config.js?v=20261002-23';
+import {subtitleText} from './i18n.js?v=20261002-23';
 
 /* Mutable cross-module game state. Kept as one object so ES module
    consumers all observe the same live values. */
@@ -11,23 +12,27 @@ export const state = {
   introLine: -1,
   muted: false,
   cam: 0,
+  camY: 0,
   shake: 0,          // screen-shake energy, decays each frame
   flash: 0,          // full-screen white flash (parry / ult), decays each frame
-  difficulty: 'casual'   // 'casual' | 'warrior', chosen on the intro screen
+  difficulty: 'casual',  // 'casual' | 'warrior'
+  language: 'en',         // 'en' | 'ne' — Nepali subtitles use romanized Nepali
+  controlMode: 'keyboard',
+  controlModeChosen: false
 };
 
-// Active difficulty row (see DIFF in config.js). Read live so a mid-run change
-// would take effect immediately; in practice it's locked at intro.
+// Active difficulty row (see DIFF in config.js); selected before the story begins.
 export function diff(){ return DIFF[state.difficulty] || DIFF.casual; }
 
 /* ================= SUBTITLES ================= */
-// Romanized Nepali only — the English translation line was removed.
+// Language is selected before the intro: English or romanized Nepali.
 export const sub = {text:'', t:0, color:'#fff'};
 
 // Duration scales with text length, floored at SUB_MIN_FRAMES so even short
 // lines stay readable. An explicit `frames` argument acts as a minimum, never
 // a maximum, so the sticky 9999 prompts still behave as before.
 export function say(text,frames,color){
+  text=subtitleText(text,state.language);
   const auto = Math.min(SUB_MAX_FRAMES,
     SUB_MIN_FRAMES + text.length * SUB_PER_CHAR);
   sub.text=text;
@@ -73,9 +78,12 @@ export function updateSparks(){
 
 /* ================= INPUT ================= */
 export const keys = {};
-// lightQ / heavyQ replace the old single atkQ — the two combo buttons.
-// Left mouse = light attack, Right mouse = parry, E = ult (iai). No heavy/throw.
-export const input = {jumpQ:false, lightQ:false, dodgeQ:false, parryQ:false, ultQ:false, freeQ:false};
+// Gamepad directions stay separate from keyboard keys so either device can
+// release input without cancelling the other device's held movement.
+export const pad = {left:false,right:false};
+// lightQ carries left-click or controller Square attack input. Right mouse / L1
+// parries; E / Triangle is Ultimate. Cross queues jump plus contextual Action.
+export const input = {jumpQ:false, lightQ:false, dodgeQ:false, parryQ:false, ultQ:false, actionQ:false};
 export function clearQueued(){
-  input.jumpQ=input.lightQ=input.dodgeQ=input.parryQ=input.ultQ=false;
+  input.jumpQ=input.lightQ=input.dodgeQ=input.parryQ=input.ultQ=input.actionQ=false;
 }

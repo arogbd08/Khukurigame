@@ -1,7 +1,7 @@
-import {ctx} from './canvas.js';
-import {W, H, GROUND, WORLD, PARRY_ACTIVE, MOVES, COMBO_GAP, DEATHBLOW_FRAMES} from './config.js';
-import {state, sub, sparks, toasts, diff} from './state.js';
-import {player, plats, boss, cage, cs} from './entities.js';
+import {ctx} from './canvas.js?v=20261002-23';
+import {W, H, GROUND, WORLD, PARRY_ACTIVE, MOVES, COMBO_GAP, DEATHBLOW_FRAMES, GROUND_GAPS, DUNGEON_PITS, VILLAGE_HOUSES, STUPA_X, STUPA_SCALE, DUNGEON_ENTRY_X, DUNGEON_ENTRY_END, DUNGEON_FLOOR, DUNGEON_BOSS_ROOM_START, DUNGEON_STEPS, DUNGEON_ALCOVES} from './config.js?v=20261002-23';
+import {state, sub, sparks, toasts, diff} from './state.js?v=20261002-23';
+import {player, plats, boss, cage, cs} from './entities.js?v=20261002-23';
 
 /* ================= SKY & PARALLAX BACKGROUND =================
    Layers, far to near. Each layer scrolls at its own fraction of the camera,
@@ -10,34 +10,33 @@ import {player, plats, boss, cage, cs} from './entities.js';
 
 export function drawSky(){
   const g=ctx.createLinearGradient(0,0,0,H);
-  g.addColorStop(0,'#2f6ea8');
-  g.addColorStop(0.34,'#67a8d8');
-  g.addColorStop(0.62,'#a8cfe4');
-  g.addColorStop(0.84,'#d8e6dc');
-  g.addColorStop(1,'#e6e2c4');
+  g.addColorStop(0,'#101522');
+  g.addColorStop(0.34,'#2b3440');
+  g.addColorStop(0.62,'#62564d');
+  g.addColorStop(0.84,'#76614e');
+  g.addColorStop(1,'#302b28');
   ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
 }
-
 function drawSun(cam){
   const sx=170-cam*0.012, sy=74;
   // outer bloom
   let rg=ctx.createRadialGradient(sx,sy,10,sx,sy,150);
-  rg.addColorStop(0,'rgba(255,238,180,0.55)');
-  rg.addColorStop(0.45,'rgba(255,220,140,0.18)');
-  rg.addColorStop(1,'rgba(255,210,120,0)');
+  rg.addColorStop(0,'rgba(255,205,137,0.46)');
+  rg.addColorStop(0.45,'rgba(221,147,94,0.18)');
+  rg.addColorStop(1,'rgba(255,176,112,0)');
   ctx.fillStyle=rg; ctx.beginPath(); ctx.arc(sx,sy,150,0,7); ctx.fill();
   // god rays — slow lazy rotation
   ctx.save(); ctx.translate(sx,sy); ctx.rotate(state.t*0.0016);
   for(let i=0;i<12;i++){
     ctx.rotate(Math.PI/6);
-    ctx.fillStyle=`rgba(255,240,190,${0.05+0.03*Math.sin(state.t/40+i)})`;
+    ctx.fillStyle=`rgba(255,207,150,${0.035+0.025*Math.sin(state.t/40+i)})`;
     ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(150,-16); ctx.lineTo(150,16); ctx.fill();
   }
   ctx.restore();
   // core
   rg=ctx.createRadialGradient(sx,sy,4,sx,sy,30);
-  rg.addColorStop(0,'#fffdf0'); rg.addColorStop(1,'#ffe08a');
-  ctx.fillStyle=rg; ctx.beginPath(); ctx.arc(sx,sy,28,0,7); ctx.fill();
+  rg.addColorStop(0,'#ffe4b3'); rg.addColorStop(1,'#d99159');
+  ctx.fillStyle=rg; ctx.beginPath(); ctx.arc(sx,sy,25,0,7); ctx.fill();
 }
 
 function cloud(x,y,s,alpha){
@@ -62,35 +61,56 @@ function drawClouds(cam){
   }
 }
 
-function ridge(cam, par, baseY, height, step, seed, fill, snow){
-  // deterministic jagged ridgeline; `seed` shifts the noise per layer
-  ctx.fillStyle=fill;
-  ctx.beginPath();
-  ctx.moveTo(-60, GROUND);
-  const off=-cam*par;
-  for(let x=-60; x<=W+60; x+=step){
-    const n=Math.sin((x+off+seed)*0.0071)*0.55
-           +Math.sin((x+off+seed)*0.0173)*0.3
-           +Math.sin((x+off+seed)*0.0339)*0.15;
-    ctx.lineTo(x, baseY - height*(0.45+0.55*Math.abs(n)));
+function ridge(cam, par, baseY, height, spacing, seed, fill, snow){
+  // Distinct angular summits read as a mountain range at a glance. Fixed
+  // world-space peaks keep the silhouette steady as each parallax layer moves.
+  const off=cam*par;
+  const first=Math.floor((off-W)/spacing)-1;
+  const last=Math.ceil((off+W)/spacing)+1;
+  const peaks=[];
+  const noise=(i,salt)=>{
+    const n=Math.sin((i+seed*0.013)*127.1+salt*311.7)*43758.5453;
+    return n-Math.floor(n);
+  };
+  for(let i=first;i<=last;i++){
+    const cx=i*spacing-off;
+    const h=height*(.78+noise(i,1)*.22);
+    const width=spacing*(.82+noise(i,2)*.38);
+    peaks.push({i,cx,h,width,top:baseY-h,valley:baseY-height*(.025+noise(i,3)*.045)});
   }
-  ctx.lineTo(W+60, GROUND); ctx.closePath(); ctx.fill();
 
-  if(snow){
-    // snowcaps: re-walk the same ridge, fill only the high points
-    ctx.fillStyle='rgba(255,255,255,0.88)';
-    for(let x=-60; x<=W+60; x+=step){
-      const n=Math.sin((x+off+seed)*0.0071)*0.55
-             +Math.sin((x+off+seed)*0.0173)*0.3
-             +Math.sin((x+off+seed)*0.0339)*0.15;
-      const h=height*(0.45+0.55*Math.abs(n));
-      const peakY=baseY-h;
-      if(h > height*0.86){
-        ctx.beginPath();
-        ctx.moveTo(x-13,peakY+15); ctx.lineTo(x,peakY-1); ctx.lineTo(x+13,peakY+15);
-        ctx.lineTo(x+6,peakY+12); ctx.lineTo(x,peakY+6); ctx.lineTo(x-6,peakY+12);
-        ctx.closePath(); ctx.fill();
-      }
+  ctx.fillStyle=fill;ctx.beginPath();ctx.moveTo(-80,GROUND);
+  for(const p of peaks){
+    ctx.lineTo(p.cx-spacing*.5,p.valley);
+    ctx.lineTo(p.cx-p.width*.34,baseY-p.h*.22);
+    ctx.lineTo(p.cx-p.width*.15,baseY-p.h*.66);
+    ctx.lineTo(p.cx-p.width*.075,baseY-p.h*.58);
+    ctx.lineTo(p.cx,p.top);
+    ctx.lineTo(p.cx+p.width*.11,baseY-p.h*.52);
+    ctx.lineTo(p.cx+p.width*.19,baseY-p.h*.61);
+    ctx.lineTo(p.cx+p.width*.34,baseY-p.h*.24);
+    ctx.lineTo(p.cx+spacing*.5,p.valley);
+  }
+  ctx.lineTo(W+80,GROUND);ctx.closePath();ctx.fill();
+
+  // Broad shadow and light planes make the sharp silhouettes feel like rocky
+  // faces instead of saw teeth; keep the contrast quiet in the existing style.
+  for(const p of peaks){
+    ctx.fillStyle='rgba(220,228,231,.075)';ctx.beginPath();
+    ctx.moveTo(p.cx,p.top);ctx.lineTo(p.cx-p.width*.34,baseY-p.h*.22);ctx.lineTo(p.cx,p.valley);ctx.closePath();ctx.fill();
+    ctx.fillStyle='rgba(12,17,25,.16)';ctx.beginPath();
+    ctx.moveTo(p.cx,p.top);ctx.lineTo(p.cx+p.width*.34,baseY-p.h*.24);ctx.lineTo(p.cx,p.valley);ctx.closePath();ctx.fill();
+    if(snow){
+      const cap=p.h*.31;
+      ctx.fillStyle='rgba(245,247,244,.86)';ctx.beginPath();ctx.moveTo(p.cx,p.top+1);
+      ctx.lineTo(p.cx-p.width*.18,p.top+cap*.57);
+      ctx.lineTo(p.cx-p.width*.105,p.top+cap*.48);
+      ctx.lineTo(p.cx-p.width*.035,p.top+cap*.72);
+      ctx.lineTo(p.cx+p.width*.035,p.top+cap*.54);
+      ctx.lineTo(p.cx+p.width*.105,p.top+cap*.78);
+      ctx.lineTo(p.cx+p.width*.18,p.top+cap*.58);
+      ctx.lineTo(p.cx+p.width*.29,p.top+cap*.9);
+      ctx.closePath();ctx.fill();
     }
   }
 }
@@ -125,7 +145,30 @@ function pine(x,baseY,s,col){
   }
 }
 
+function badlands(cam,par,baseY){
+  const colors=['#6e4b42','#785347','#674940','#805b49'];
+  for(let i=-2;i<8;i++){
+    const x=i*250-cam*par, h=72+(Math.abs(i*47)%58), w=248;
+    ctx.fillStyle=colors[(i+8)%colors.length];ctx.beginPath();
+    ctx.moveTo(x,GROUND+4);ctx.lineTo(x,baseY-22);
+    ctx.lineTo(x+22,baseY-35);ctx.lineTo(x+43,baseY-h);
+    ctx.lineTo(x+68,baseY-h-8);ctx.lineTo(x+89,baseY-h+1);
+    ctx.lineTo(x+120,baseY-48);ctx.lineTo(x+154,baseY-54);
+    ctx.lineTo(x+180,baseY-30);ctx.lineTo(x+208,baseY-39);
+    ctx.lineTo(x+w,baseY-17);ctx.lineTo(x+w,GROUND+4);ctx.closePath();ctx.fill();
+    ctx.strokeStyle='rgba(202,147,105,.26)';ctx.lineWidth=1;
+    for(let layer=0;layer<4;layer++){
+      const yy=baseY-22-layer*12;
+      ctx.beginPath();ctx.moveTo(x+8,yy);ctx.lineTo(x+55,yy-7);ctx.lineTo(x+99,yy-2);
+      ctx.lineTo(x+145,yy+5);ctx.lineTo(x+206,yy-2);ctx.stroke();
+    }
+    ctx.strokeStyle='rgba(40,29,29,.2)';ctx.beginPath();ctx.moveTo(x+66,baseY-h+2);ctx.lineTo(x+59,baseY-19);ctx.moveTo(x+73,baseY-h+5);ctx.lineTo(x+82,baseY-12);ctx.stroke();
+  }
+}
+
 function drawPrayerFlagLine(x,y,span,sag){
+  ctx.strokeStyle='#342b24';ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,GROUND);ctx.moveTo(x+span,y);ctx.lineTo(x+span,GROUND);ctx.stroke();
   ctx.strokeStyle='rgba(90,80,60,0.45)'; ctx.lineWidth=1;
   ctx.beginPath(); ctx.moveTo(x,y); ctx.quadraticCurveTo(x+span/2,y+sag,x+span,y); ctx.stroke();
   const fc=['#c0392b','#2980b9','#27ae60','#f1c40f','#ecf0f1'];
@@ -143,31 +186,31 @@ export function drawBackground(){
   drawClouds(cam);
 
   // ---- far snow range ----
-  ridge(cam, 0.05, GROUND-46, 210, 14, 0,    '#9fb4cc', true);
-  hazeBand(GROUND-150, 120, 0.5);
+  ridge(cam, 0.05, GROUND-46, 196, 244, 0,    '#78818a', true);
+  hazeBand(GROUND-150, 120, 0.24);
 
   // ---- mid range ----
-  ridge(cam, 0.13, GROUND-30, 165, 12, 1400, '#7d8fab', true);
-  hazeBand(GROUND-104, 96, 0.42);
+  ridge(cam, 0.13, GROUND-30, 150, 220, 1400, '#626b72', false);
+  badlands(cam,0.20,GROUND-4);
+  hazeBand(GROUND-104, 96, 0.24);
   drawBirds(cam);
 
   // ---- near range ----
-  ridge(cam, 0.26, GROUND-16, 118, 10, 3100, '#5e6b83', false);
-  hazeBand(GROUND-70, 74, 0.3);
+  ridge(cam, 0.26, GROUND-16, 104, 194, 3100, '#534a49', false);
+  hazeBand(GROUND-70, 74, 0.16);
 
-  // ---- village band: stupa, houses, prayer flags ----
-  drawBoudha(900-cam*0.5, GROUND-30);
-  for(const hx of [430,1300,2200,3300,3900]) drawHouse(hx-cam*0.62, GROUND-30);
+  // ---- distant village band: houses sit on the same valley floor ----
+  for(const hx of [430,1300,2200,3300,3900]) drawHouse(hx-cam*0.62, GROUND);
   drawPrayerFlagLine(300-cam*0.62, GROUND-118, 260, 40);
   drawPrayerFlagLine(1900-cam*0.62, GROUND-108, 230, 36);
   drawPrayerFlagLine(3500-cam*0.62, GROUND-124, 280, 44);
 
   // ---- terraced foothills ----
-  ctx.fillStyle='#4a5c34';
+  ctx.fillStyle='#544b3d';
   for(let i=0;i<13;i++){ const hx=i*440-cam*0.5;
     ctx.beginPath();ctx.moveTo(hx,GROUND);ctx.lineTo(hx+220,GROUND-110);ctx.lineTo(hx+440,GROUND);ctx.fill(); }
   // terrace contour lines cut into the hills
-  ctx.strokeStyle='rgba(120,150,88,0.4)'; ctx.lineWidth=1;
+  ctx.strokeStyle='rgba(164,126,84,0.35)'; ctx.lineWidth=1;
   for(let i=0;i<13;i++){ const hx=i*440-cam*0.5;
     for(let k=1;k<=5;k++){
       const f=k/6;
@@ -182,10 +225,10 @@ export function drawBackground(){
   for(let i=0;i<26;i++){
     const px=((i*173)%2600)*1.0-cam*0.72;
     const wrapped=((px%(W+300))+(W+300))%(W+300)-150;
-    pine(wrapped, GROUND-4, 0.62+((i*7)%4)/10, '#2f4326');
+    if(i%4===0)pine(wrapped, GROUND-4, 0.44+((i*7)%4)/15, '#3b3b2f');
   }
 
-  ctx.fillStyle='#3a4a2b';
+  ctx.fillStyle='#382f2a';
   for(let i=0;i<13;i++){ const hx=i*440-cam*0.86;
     ctx.beginPath();ctx.moveTo(hx,GROUND+6);ctx.lineTo(hx+200,GROUND-56);ctx.lineTo(hx+400,GROUND+6);ctx.fill(); }
 
@@ -198,33 +241,50 @@ export function drawBackground(){
   }
 }
 
-export function drawGround(){
+export function drawGround({platforms=true,gaps=true,surface=true}={}){
+  if(!surface)return;
   const cam=state.cam, t=state.t;
-  ctx.fillStyle='#473526'; ctx.fillRect(0,GROUND,WORLD,H-GROUND);
+  ctx.fillStyle='#40332c'; ctx.fillRect(0,GROUND,WORLD,H-GROUND);
+  if(gaps)for(const [a,b] of GROUND_GAPS){
+    const bottom=a===DUNGEON_ENTRY_X?DUNGEON_FLOOR+18:H+24;
+    ctx.fillStyle='#08090d';ctx.fillRect(a,GROUND,b-a,bottom-GROUND);
+    ctx.fillStyle='#24272a';ctx.fillRect(a-5,GROUND,b-a+10,5);
+    ctx.fillStyle='#15191d';ctx.fillRect(a,GROUND+5,5,H-GROUND);
+    ctx.fillRect(b-5,GROUND+5,5,H-GROUND);
+  }
   // soil striation so the ground isn't a flat slab
-  ctx.fillStyle='#3d2c1f';
+  ctx.fillStyle='#352b27';
   for(let gx=Math.floor(cam/40)*40-40; gx<cam+W+40; gx+=40){
+    if(gaps&&GROUND_GAPS.some(([a,b])=>gx>=a-40&&gx<b))continue;
     ctx.fillRect(gx, GROUND+14+((gx*7)%9), 26, 3);
     ctx.fillRect(gx+18, GROUND+26+((gx*11)%7), 18, 3);
   }
-  ctx.fillStyle='#4d6a30'; ctx.fillRect(0,GROUND,WORLD,5);
-  ctx.strokeStyle='#5f7a36'; ctx.lineWidth=2;
-  for(let gx=Math.floor(cam/18)*18-18;gx<cam+W+18;gx+=18){
-    const h0=6+4*Math.sin(gx*0.7), sway=Math.sin(t/20+gx)*1.6;
-    ctx.beginPath();
-    ctx.moveTo(gx,GROUND);ctx.lineTo(gx+sway,GROUND-h0);
-    ctx.moveTo(gx+5,GROUND);ctx.lineTo(gx+5+sway,GROUND-h0*0.7);
-    ctx.moveTo(gx-4,GROUND);ctx.lineTo(gx-4+sway,GROUND-h0*0.85); ctx.stroke();
+  ctx.fillStyle='#695345'; ctx.fillRect(0,GROUND,WORLD,3);
+  // Recut the open chasm after the continuous ground trim is drawn.
+  if(gaps)for(const [a,b] of GROUND_GAPS){ctx.fillStyle='#080b11';ctx.fillRect(a,GROUND,b-a,H-GROUND+24);ctx.fillStyle='#24272a';ctx.fillRect(a-5,GROUND,b-a+10,5);}
+  ctx.strokeStyle='#7a624d';ctx.lineWidth=1.2;
+  for(let gx=Math.floor(cam/36)*36-36;gx<cam+W+36;gx+=36){
+    if(gaps&&GROUND_GAPS.some(([a,b])=>gx>=a-18&&gx<b))continue;
+    const sprout=(gx%5===0)?7:3;
+    ctx.beginPath();ctx.moveTo(gx,GROUND);ctx.lineTo(gx+Math.sin(t/24+gx)*.7,GROUND-sprout);ctx.stroke();
   }
-  for(const p of plats){
-    ctx.fillStyle='#6b5236'; ctx.fillRect(p.x,p.y,p.w,p.h);
-    ctx.fillStyle='#3c2c1c'; ctx.fillRect(p.x,p.y+p.h-4,p.w,4);
-    ctx.fillStyle='#4d6a30'; ctx.fillRect(p.x,p.y-2,p.w,3);
-    // grass fringe hanging off the platform lip
-    ctx.strokeStyle='#5f7a36'; ctx.lineWidth=1.5;
-    for(let gx=p.x+3; gx<p.x+p.w; gx+=9){
-      const sway=Math.sin(t/22+gx)*1.3;
-      ctx.beginPath(); ctx.moveTo(gx,p.y-1); ctx.lineTo(gx+sway,p.y-6); ctx.stroke();
+  if(platforms)for(const p of plats){
+    if(p.kind==='terrace'){
+      ctx.fillStyle='#514136';ctx.beginPath();ctx.moveTo(p.x+7,p.y);ctx.lineTo(p.x+p.w-5,p.y);ctx.lineTo(p.x+p.w-13,GROUND);ctx.lineTo(p.x+4,GROUND);ctx.closePath();ctx.fill();
+      ctx.fillStyle='#78614b';ctx.beginPath();ctx.moveTo(p.x+2,p.y);ctx.lineTo(p.x+p.w-2,p.y);ctx.lineTo(p.x+p.w-6,p.y+5);ctx.lineTo(p.x+5,p.y+5);ctx.closePath();ctx.fill();
+      ctx.strokeStyle='rgba(29,25,23,.66)';ctx.lineWidth=1;
+      for(let yy=p.y+15;yy<GROUND;yy+=13){ctx.beginPath();ctx.moveTo(p.x+6,yy);ctx.lineTo(p.x+p.w-10,yy);ctx.stroke();}
+      for(let yy=p.y+6,row=0;yy<GROUND;yy+=13,row++){for(let xx=p.x+11+(row%2)*13;xx<p.x+p.w-12;xx+=26){ctx.beginPath();ctx.moveTo(xx,yy);ctx.lineTo(xx-4,yy+9);ctx.stroke();}}
+    } else if(p.kind==='dungeonStep'){
+      const h=Math.min(22,DUNGEON_FLOOR-p.y);
+      ctx.fillStyle='#55483c';ctx.beginPath();ctx.moveTo(p.x+5,p.y+h);ctx.lineTo(p.x+5,p.y+7);ctx.lineTo(p.x+14,p.y);ctx.lineTo(p.x+p.w-7,p.y);ctx.lineTo(p.x+p.w,p.y+8);ctx.lineTo(p.x+p.w,p.y+h);ctx.closePath();ctx.fill();
+      ctx.fillStyle='#92806a';ctx.fillRect(p.x+10,p.y-2,p.w-18,4);
+      ctx.strokeStyle='#302b28';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(p.x+8,p.y+10);ctx.lineTo(p.x+p.w-8,p.y+10);ctx.stroke();
+    } else if(p.kind==='roof'){
+      // The walkable collision surface is the house's actual parapet roof.
+      continue;
+    } else {
+      continue;
     }
   }
 }
@@ -375,7 +435,8 @@ const REST_POSE={hx:14,hy:30,rot:-0.6};
 const POSE={
   L1:{wind:{hx:-2,hy:30,rot:-0.5}, hit:{hx:38,hy:31,rot:0.05}, rec:{hx:18,hy:31,rot:-0.2}}, // straight poke/thrust
   L2:{wind:{hx:-9,hy:20,rot:-1.5}, hit:{hx:32,hy:35,rot:0.8},  rec:{hx:16,hy:31,rot:0.0}},  // side swing (horizontal)
-  L3:{wind:{hx:-6,hy:42,rot:2.0},  hit:{hx:34,hy:16,rot:-1.0}, rec:{hx:18,hy:26,rot:-0.4}}  // rising finisher
+  L3:{wind:{hx:-6,hy:42,rot:2.0},  hit:{hx:34,hy:16,rot:-1.0}, rec:{hx:18,hy:26,rot:-0.4}}, // rising finisher
+  AIR_DOWN:{wind:{hx:-5,hy:13,rot:-1.85},hit:{hx:25,hy:52,rot:1.25},rec:{hx:18,hy:37,rot:0.25}} // airborne downward slash
 };
 function attackPose(p,mv){
   if(!mv) return null;
@@ -411,6 +472,7 @@ function drawTrail(){
     const a=hariTrail[i-1], b=hariTrail[i];
     const al=Math.max(0,Math.min(1,b.life/b.max));
     const col = b.kind==='iai' ? `rgba(210,240,255,${0.55*al})`
+              : b.kind==='down' ? `rgba(255,190,112,${0.58*al})`
               : b.kind==='heavy' ? `rgba(255,225,150,${0.5*al})`
                                   : `rgba(255,252,225,${0.45*al})`;
     ctx.fillStyle=col;
@@ -426,6 +488,7 @@ function drawTrail(){
 /* ================= HARI — FULLY ARTICULATED ================= */
 export function drawHari(){
   const p=player, t=state.t;
+  const meditating=p.cinematicPose==='meditate';
   const PT=diff().parryThresh;
   const mv=p.move?MOVES[p.move]:null;
   const atkActive = mv && p.atkT>=mv.a0 && p.atkT<=mv.a1;
@@ -460,7 +523,7 @@ export function drawHari(){
   if(dbActive) pushTrail(pose.hx,pose.hy,pose.rot,'iai');
   else if(ultPose){ if((24-p.ult)>=5) pushTrail(ultPose.hx,ultPose.hy,ultPose.rot,'iai'); }
   else if(cpose && (cpose.phase==='hit' || (cpose.phase==='rec' && p.atkT<=mv.a1+2)))
-    pushTrail(cpose.hx,cpose.hy,cpose.rot,'light');
+    pushTrail(cpose.hx,cpose.hy,cpose.rot,mv.airDown?'down':'light');
   stepTrail();
 
   const sq=p.squash, scX=1+sq*0.22, scY=1-sq*0.26;
@@ -471,7 +534,7 @@ export function drawHari(){
   ctx.scale(p.facing,1);
 
   // full-body afterimages on fast, flashy moves + dodge/ult
-  const flashy = (mv && (mv.iai||mv.finisher||p.move==='L3')) && atkActive;
+  const flashy = (mv && (mv.iai||mv.finisher||mv.airDown||p.move==='L3')) && atkActive;
   if(flashy || p.dodge>0 || p.ult>0){
     const ghostCol = (mv&&mv.iai)?'rgba(180,225,255,0.28)':(p.ult>0?'rgba(255,210,120,0.22)':'rgba(230,217,181,0.22)');
     for(let gi=1;gi<=2;gi++){ ctx.save(); ctx.globalAlpha=0.5/gi;
@@ -492,6 +555,7 @@ export function drawHari(){
   else if(parrying){ fA={x:-9,y:58}; fB={x:9,y:58}; }
   else if(moving){ const s1=Math.sin(wp),s2=Math.sin(wp+Math.PI);
     fA={x:s1*9,y:58-Math.max(0,s1)*6}; fB={x:s2*9,y:58-Math.max(0,s2)*6}; }
+  else if(meditating){ fA={x:-15,y:47}; fB={x:15,y:47}; }
   else { fA={x:-4,y:58}; fB={x:4,y:58}; }
   const foot=(f,col)=>{ limb2(f.x<0?-3:3,44,f.x,f.y,9,10,1,6.5,col); ctx.fillStyle='#241a14'; ctx.fillRect(f.x-4,f.y-2,10,3); };
   foot(fA,'#b0a685');   // far leg (shaded)
@@ -499,7 +563,7 @@ export function drawHari(){
 
   /* ---- katana saya on the hip: holds the katana normally; empty while the ult
      (iai draw) has it in hand ---- */
-  drawSaya(!ulting, 0);
+  if(!p.cinematicUnarmed) drawSaya(!ulting, 0);
 
   /* ---- OFF ARM (two-bone) ---- */
   {
@@ -508,6 +572,7 @@ export function drawHari(){
     else if(airborne){ ox=-13; oy=p.vy<0?18:34; }
     else if(parrying){ ox=6; oy=30; }
     else if(moving){ ox=-8+Math.sin(wp+Math.PI)*6; oy=34+Math.abs(Math.sin(wp))*3; }
+    else if(meditating){ ox=-5; oy=38+Math.sin(p.breathe)*0.4; }
     else { ox=-11; oy=38+Math.sin(p.breathe)*1.2; }
     limb2(-6,27,ox,oy,10,10,-1,4.5,'#d8cdb0',SKIN,3);
   }
@@ -519,6 +584,11 @@ export function drawHari(){
   ctx.fillStyle=ROBE_D;
   ctx.beginPath(); ctx.moveTo(-10,44); ctx.lineTo(10,44); ctx.lineTo(11+flare,57); ctx.lineTo(-11+flare,57); ctx.closePath(); ctx.fill();
   ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(-9,22); ctx.lineTo(8,46); ctx.stroke();
+  ctx.strokeStyle='rgba(93,76,58,.54)';ctx.lineWidth=1.2;ctx.beginPath();
+  ctx.moveTo(-7,25);ctx.quadraticCurveTo(-3,34,-7+flare,45);ctx.moveTo(6,29);ctx.lineTo(8+flare,39);
+  ctx.moveTo(-9,49);ctx.quadraticCurveTo(0,52,10+flare,49);ctx.stroke();
+  ctx.fillStyle='#c3a46b';ctx.beginPath();ctx.arc(0,36,1.6,0,7);ctx.arc(0,41,1.6,0,7);ctx.fill();
+  ctx.strokeStyle='rgba(247,227,188,.52)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-9,57);ctx.lineTo(-10+flare,59);ctx.moveTo(10+flare,57);ctx.lineTo(11+flare,59);ctx.stroke();
   ctx.fillStyle=SASH; ctx.fillRect(-10,42,20,3);
 
   /* ---- PARRY: no shield arc — just a small orange spark flash at the blade when a
@@ -539,25 +609,42 @@ export function drawHari(){
     else if(parrying){ hx=16; hy=24; rot=p.parry>PT?-1.7:-1.4; }   // blade raised to guard
     else if(airborne){ hx=16; hy=30; rot=p.vy<0?-1.2:-0.7; }
     else if(moving){ hx=15; hy=31+Math.sin(wp)*1.5; rot=-0.7+Math.sin(wp)*0.16; }
+    else if(meditating){ hx=9; hy=40+Math.sin(p.breathe)*0.4; rot=-0.2; }
     else { hx=15; hy=31+Math.sin(p.breathe)*0.6; rot=-0.6+Math.sin(p.breathe)*0.05; }
     limb2(4,27,hx,hy,12,13,1,5,SKIN,SKIN_D,3.2);
     ctx.save(); ctx.translate(hx,hy); ctx.rotate(rot);
-    if(ulting) katanaBlade(1); else khukuriBlade(1);
+    if(ulting) katanaBlade(1); else if(!p.cinematicUnarmed) khukuriBlade(1);
     ctx.restore();
   }
 
   /* ---- HEAD ---- */
   const headTilt = pose ? (pose.phase==='wind'?-0.15:0.12) : moving?Math.sin(wp)*0.05 : airborne?(p.vy<0?-0.12:0.08):0;
   ctx.save(); ctx.translate(0,8); ctx.rotate(headTilt);
+  // Hari's tied hair sits behind the skull, with its knot at the rear crown.
+  const ponySway=pose?1.5:moving?Math.sin(wp)*2.4:airborne?-1:Math.sin(p.breathe)*0.6;
+  ctx.fillStyle='#241a14';ctx.beginPath();
+  ctx.moveTo(-6,-10);ctx.quadraticCurveTo(-14,-8,-13+ponySway,-1);
+  ctx.quadraticCurveTo(-12+ponySway,5,-16+ponySway,9);ctx.quadraticCurveTo(-8,7,-8,-1);
+  ctx.lineTo(-3,-8);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.ellipse(-7,-13,4.8,5.1,-.42,0,7);ctx.fill();
+  ctx.fillStyle=SASH;ctx.beginPath();ctx.ellipse(-6,-9,2.3,1.45,-.25,0,7);ctx.fill();
   ctx.fillStyle=SKIN; ctx.beginPath(); ctx.arc(0,0,11,0,7); ctx.fill();
-  ctx.fillStyle=SASH; ctx.fillRect(-6,-3,12,3);
-  ctx.fillStyle='#e02020'; ctx.beginPath(); ctx.arc(0,-4,2,0,7); ctx.fill();
-  ctx.fillStyle='#fff'; const blink=(t%210)<6;
-  if(!blink) ctx.fillRect(3,-2,4,parrying?1.6:3);
-  ctx.fillStyle='#201810'; if(!blink) ctx.fillRect(5,-2,2,parrying?1.6:3);
-  ctx.fillStyle='#241a14'; ctx.fillRect(-3,-15,6,16);
-  const tupiSway = pose?-4 : moving?-Math.sin(wp)*3 : airborne?-3 : Math.sin(p.breathe)*0.8;
-  ctx.beginPath(); ctx.arc(tupiSway,4,4,0,7); ctx.fill();
+  // Give Hari a clear, readable profile instead of the old pin-sized nose.
+  ctx.fillStyle=SKIN_D;ctx.beginPath();ctx.moveTo(7,-2);ctx.quadraticCurveTo(10,-1,12,0);ctx.lineTo(16,2);ctx.quadraticCurveTo(13,4,9,4);ctx.lineTo(7,5);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='rgba(238,190,145,.78)';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(9,-1);ctx.quadraticCurveTo(12,0,14,2);ctx.stroke();
+  ctx.fillStyle='#4d3026';ctx.fillRect(12,3,2,1);
+  // Shaved scalp: the tied ponytail is the only hair on Hari's head.
+  const blink=state.scene!=='cutscene'&&(t%210)<6;
+  if(blink){ctx.strokeStyle='#38241b';ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(1,-.6);ctx.quadraticCurveTo(3,-1.8,6,-.5);ctx.stroke();}
+  else{
+    ctx.fillStyle='#fff4df';ctx.beginPath();ctx.ellipse(3.8,-.7,2.9,2.45,-.08,0,7);ctx.fill();
+    ctx.fillStyle='#24170f';ctx.beginPath();ctx.ellipse(4.7,-.45,1.15,1.9,0,0,7);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.9)';ctx.beginPath();ctx.arc(4.1,-1.4,.55,0,7);ctx.fill();
+  }
+  ctx.strokeStyle='rgba(57,39,28,.9)';ctx.lineWidth=1.3;ctx.beginPath();ctx.moveTo(1,-4);ctx.quadraticCurveTo(3,-5,6,-4.4);ctx.stroke();
+  // Three distinct white marks sit on the exposed front of Hari's forehead.
+  ctx.strokeStyle='#f0e6cf';ctx.lineWidth=1.5;ctx.lineCap='round';
+  for(const yy of [-8,-5.5,-3]){ctx.beginPath();ctx.moveTo(2.5,yy);ctx.quadraticCurveTo(4.7,yy-0.5,7,yy);ctx.stroke();}
   ctx.restore();
 
   ctx.restore();
@@ -660,9 +747,13 @@ function drawCadre(e){
   ctx.beginPath(); ctx.moveTo(-3,16); ctx.lineTo(-3,26); ctx.lineTo(0,17); ctx.fill();
   ctx.beginPath(); ctx.moveTo(3,16); ctx.lineTo(3,26); ctx.lineTo(0,17); ctx.fill();
   ctx.fillStyle='#7a1f1f'; ctx.fillRect(-1,17,2,7);
+  ctx.fillStyle='#4d3028';ctx.fillRect(-12,31,24,4);ctx.fillStyle='#c19a5e';ctx.fillRect(5,31,4,4);
+  ctx.strokeStyle='rgba(183,153,112,.62)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-8,22);ctx.lineTo(-5,29);ctx.moveTo(8,22);ctx.lineTo(5,29);ctx.stroke();
+  ctx.fillStyle='#8f302a';ctx.beginPath();ctx.moveTo(-10,18);ctx.lineTo(0,22);ctx.lineTo(10,18);ctx.lineTo(7,25);ctx.lineTo(0,28);ctx.lineTo(-7,25);ctx.closePath();ctx.fill();
   ctx.fillStyle=skin; ctx.fillRect(-3,9,6,5); ctx.beginPath(); ctx.arc(0,4,8,0,7); ctx.fill();
   ctx.fillStyle='#fff'; ctx.fillRect(2,2,4,3); ctx.fillStyle='#201810'; ctx.fillRect(4,2,2,3);
   ctx.fillRect(1,-1,7,1.4); ctx.fillStyle='#2e2218'; ctx.fillRect(-1,7,7,2);
+  ctx.strokeStyle='#51352a';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(6,5);ctx.lineTo(9,7);ctx.moveTo(1,11);ctx.lineTo(6,11);ctx.stroke();
   drawTopi(0,-2,9,'#161620');
   ctx.restore();
 }
@@ -688,9 +779,13 @@ function drawThug(e){
   ctx.fillStyle='#ddd8c0'; ctx.fillRect(-3,14,6,15);
   ctx.fillStyle=coat; ctx.fillRect(-8,14,5,16); ctx.fillRect(3,14,5,16);
   ctx.fillStyle='#3a7a3a'; ctx.fillRect(-1,14,2,6); // green belt
+  ctx.fillStyle='#574332';ctx.fillRect(-10,27,20,3);ctx.fillStyle='#a68a58';ctx.fillRect(-9,29,7,7);
+  ctx.strokeStyle='rgba(193,163,122,.62)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-7,18);ctx.lineTo(-3,25);ctx.moveTo(7,18);ctx.lineTo(3,25);ctx.stroke();
   ctx.fillStyle=skin; ctx.fillRect(-2,7,4,5); ctx.beginPath(); ctx.arc(0,3,7,0,7); ctx.fill();
-  ctx.fillStyle='#101008'; ctx.fillRect(-6,-1,12,8); // dark hair
+  ctx.fillStyle='#101008';ctx.beginPath();ctx.moveTo(-7,5);ctx.quadraticCurveTo(-7,-5,1,-5);ctx.quadraticCurveTo(8,-3,7,5);ctx.lineTo(4,2);ctx.lineTo(-4,4);ctx.closePath();ctx.fill(); // dark hood and hair
+  ctx.fillStyle='#eee0c0';ctx.fillRect(3,4,3,2);ctx.fillStyle='#19120e';ctx.fillRect(4,4,1.4,2);
   ctx.fillStyle='#201810'; ctx.fillRect(-2,5,7,2); // brow
+  ctx.strokeStyle='#963e32';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(-5,10);ctx.lineTo(4,10);ctx.stroke();
   ctx.restore();
 }
 
@@ -715,6 +810,8 @@ function drawHeavy(e){
   ctx.beginPath(); ctx.ellipse(0,42,18,14,0,0,7); ctx.fill(); // belly
   ctx.fillStyle='#eee0c0'; ctx.fillRect(-5,20,10,22); // shirt
   ctx.fillStyle='#9a1a1a'; ctx.fillRect(-14,18,28,4); // red band
+  ctx.fillStyle='#463427';ctx.fillRect(-14,44,28,5);ctx.fillStyle='#c3a25f';ctx.fillRect(-2,44,5,5);
+  ctx.strokeStyle='rgba(209,180,133,.6)';ctx.lineWidth=1.1;ctx.beginPath();ctx.moveTo(-12,24);ctx.lineTo(-7,35);ctx.moveTo(12,24);ctx.lineTo(7,35);ctx.moveTo(-8,39);ctx.lineTo(-5,45);ctx.stroke();
   // wide arms
   ctx.fillStyle=coat; ctx.fillRect(-18,20,5,16); ctx.fillRect(13,20,5,16);
   ctx.fillStyle=skin; ctx.fillRect(-18,32,5,6); ctx.fillRect(13,32,5,6);
@@ -733,12 +830,12 @@ export function drawBoss(){
   const t=state.t;
   const {x,y,dir,state:bstate,hitT,phase,spinT,enrageFlash}=boss;
   const skin='#c98a5e';
-  const coat=hitT>0?'#ff6644':enrageFlash>0?`hsl(${t*15%360},80%,40%)`:(phase===3?'#3a0a0a':phase===2?'#1a0a22':'#1a1a22');
+  const coat=hitT>0?'#ff6644':enrageFlash>0?'#74372f':(phase===3?'#42221f':phase===2?'#302b39':'#29313d');
   const bob=bstate==='wait'?Math.sin(boss.anim)*1.8:0;
-  ctx.save(); ctx.translate(x+30,y+bob);
+  ctx.save(); ctx.translate(x+36,y+bob);ctx.scale(1.12,1.18);
   if(spinT>0){ ctx.rotate((1-spinT/52)*dir*Math.PI*2); } // spin visual
   ctx.scale(dir,1);
-  // anticipation/follow-through lean, like the mooks but heavier and slower
+  // Keep the minister's silhouette grounded and unmistakable as a suited man.
   const blean = bstate&&bstate.endsWith('_tel') ? -0.12
               : (bstate==='slash'||bstate==='leap'||bstate==='spin'||bstate==='stomp') ? 0.13
               : Math.sin(boss.anim*0.5)*0.025;
@@ -747,33 +844,53 @@ export function drawBoss(){
     ctx.beginPath(); ctx.ellipse(0,48,30,46,0,0,7); ctx.fill(); }
   if(bstate==='spin'){ ctx.fillStyle=`rgba(255,150,50,${0.4+0.2*Math.sin(t/2)})`;
     ctx.beginPath(); ctx.arc(0,48,46,0,7); ctx.fill(); }
-  // big sword
-  ctx.save(); ctx.translate(16,40); ctx.rotate(bstate==='slash_tel'||bstate==='leap_tel'?-1.2:-0.3);
-  ctx.fillStyle='#cfd5df'; ctx.fillRect(0,-2,40,5); ctx.fillStyle='#5a3a20'; ctx.fillRect(-7,-3,8,7); ctx.restore();
-  // legs with a lumbering cycle
+  // Separate trouser legs and shoes; stride reads as two legs instead of one stick.
   {
-    const moving=bstate==='wait'||bstate==='slash';
-    const s1=moving?Math.sin(boss.anim):0, s2=moving?Math.sin(boss.anim+Math.PI):0;
-    ctx.strokeStyle='#e7e1cf'; ctx.lineWidth=11; ctx.lineCap='round';
-    for(const s of [s1,s2]){
-      const fx=s*9, fy=90-Math.max(0,s)*5;
-      ctx.beginPath(); ctx.moveTo(0,72); ctx.quadraticCurveTo(fx*0.5,81,fx,fy); ctx.stroke();
-      ctx.fillStyle='#15161f'; ctx.fillRect(fx-7,fy-2,15,3);
-    }
+    const moving=bstate==='wait'||bstate==='slash'||bstate==='leap';
+    const s1=moving?Math.sin(boss.anim)*5:0, s2=moving?Math.sin(boss.anim+Math.PI)*5:0;
+    const trouser=(hip,step,shade)=>{
+      const knee=hip+step*.48, ankle=hip+step;
+      ctx.fillStyle=shade;ctx.beginPath();ctx.moveTo(hip-7,63);ctx.lineTo(hip+6,63);ctx.lineTo(knee+6,78);ctx.lineTo(ankle+5,90);ctx.lineTo(ankle-6,90);ctx.lineTo(knee-6,79);ctx.closePath();ctx.fill();
+      ctx.strokeStyle='rgba(76,68,59,.65)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(knee+3,80);ctx.lineTo(ankle+2,88);ctx.stroke();
+      ctx.fillStyle='#17191e';ctx.beginPath();ctx.moveTo(ankle-7,89);ctx.lineTo(ankle+5,89);ctx.quadraticCurveTo(ankle+11,92,ankle+10,95);ctx.lineTo(ankle-8,95);ctx.closePath();ctx.fill();
+      ctx.fillStyle='rgba(220,213,194,.38)';ctx.fillRect(ankle-5,91,8,1);
+    };
+    trouser(-11,s1,'#dfd8c7');trouser(11,s2,'#c8c1b2');
   }
-  ctx.fillStyle=coat; ctx.fillRect(-26,20,52,56);
-  ctx.beginPath(); ctx.ellipse(0,54,27,24,0,0,7); ctx.fill();
-  ctx.fillStyle='#ece3cc'; ctx.fillRect(-7,22,14,38);
-  ctx.fillStyle='#9a1f2a'; ctx.beginPath(); ctx.moveTo(-4,22); ctx.lineTo(4,22); ctx.lineTo(2,54); ctx.lineTo(-2,54); ctx.fill();
-  ctx.fillStyle='#caa84e'; ctx.save(); ctx.rotate(0.5); ctx.fillRect(-6,18,10,46); ctx.restore();
-  ctx.fillStyle=skin; ctx.fillRect(-6,12,12,9); ctx.beginPath(); ctx.arc(0,6,15,0,7); ctx.fill();
-  ctx.beginPath(); ctx.arc(-10,13,5,0,7); ctx.arc(10,13,5,0,7); ctx.fill();
-  ctx.strokeStyle='#222'; ctx.lineWidth=1.6; ctx.strokeRect(-12,1,9,7); ctx.strokeRect(3,1,9,7);
-  ctx.beginPath(); ctx.moveTo(-3,4); ctx.lineTo(3,4); ctx.stroke();
-  ctx.fillStyle='#fff'; ctx.fillRect(-9,3,4,3); ctx.fillRect(5,3,4,3);
-  ctx.fillStyle='#201810'; ctx.fillRect(-6,3,2,3); ctx.fillRect(8,3,2,3);
-  ctx.fillStyle='#4a3a2a'; ctx.fillRect(-7,11,14,3);
-  drawTopi(0,-4,13,'#161620');
+  // Arms telegraph attacks with body language; the minister carries no weapon.
+  const tel=bstate&&bstate.endsWith('_tel'), striking=['slash','leap','spin','stomp'].includes(bstate);
+  const raised=bstate==='wait'||bstate==='taunt';
+  const leadElbow=raised?{x:24,y:8}:tel?{x:28,y:32}:striking?{x:27,y:38}:{x:23,y:40};
+  const leadHand=raised?{x:25,y:-5}:tel?{x:36,y:40}:striking?{x:32,y:44}:{x:24,y:48};
+  ctx.strokeStyle='#10141c';ctx.lineWidth=13;ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.beginPath();ctx.moveTo(-19,27);ctx.lineTo(-27,40);ctx.lineTo(-24,53);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(18,27);ctx.lineTo(leadElbow.x,leadElbow.y);ctx.lineTo(leadHand.x,leadHand.y);ctx.stroke();
+  ctx.strokeStyle=coat;ctx.lineWidth=10;ctx.beginPath();ctx.moveTo(-19,27);ctx.lineTo(-27,40);ctx.lineTo(-24,53);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(18,27);ctx.lineTo(leadElbow.x,leadElbow.y);ctx.lineTo(leadHand.x,leadHand.y);ctx.stroke();
+  ctx.fillStyle=skin;ctx.beginPath();ctx.arc(-24,55,5,0,7);ctx.arc(leadHand.x+1,leadHand.y+1,raised?6:5.5,0,7);ctx.fill();
+  if(raised){ctx.strokeStyle='#8d5a3c';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(leadHand.x-2,leadHand.y-3);ctx.lineTo(leadHand.x-1,leadHand.y);ctx.moveTo(leadHand.x+1,leadHand.y-3);ctx.lineTo(leadHand.x+2,leadHand.y);ctx.stroke();}
+  // Simple dark jacket over a white open-collar shirt, with no tie.
+  ctx.fillStyle='#10141c';ctx.beginPath();ctx.moveTo(-23,20);ctx.lineTo(-17,17);ctx.lineTo(17,17);ctx.lineTo(24,21);ctx.lineTo(22,67);ctx.quadraticCurveTo(0,73,-22,67);ctx.closePath();ctx.fill();
+  ctx.fillStyle=coat;ctx.beginPath();ctx.moveTo(-20,21);ctx.lineTo(-15,19);ctx.lineTo(15,19);ctx.lineTo(21,22);ctx.lineTo(19,65);ctx.quadraticCurveTo(0,70,-19,65);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#eee9db';ctx.beginPath();ctx.moveTo(-7,22);ctx.lineTo(7,22);ctx.lineTo(8,62);ctx.quadraticCurveTo(0,65,-8,62);ctx.closePath();ctx.fill();
+  ctx.fillStyle='rgba(126,113,97,.2)';ctx.beginPath();ctx.moveTo(4,29);ctx.lineTo(6,58);ctx.lineTo(3,60);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#e9e3d5';ctx.beginPath();ctx.moveTo(-8,18);ctx.lineTo(0,25);ctx.lineTo(-3,31);ctx.lineTo(-12,22);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(8,18);ctx.lineTo(0,25);ctx.lineTo(3,31);ctx.lineTo(12,22);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#171c25';ctx.beginPath();ctx.moveTo(-17,20);ctx.lineTo(-7,21);ctx.lineTo(-1,29);ctx.lineTo(-10,38);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(17,20);ctx.lineTo(7,21);ctx.lineTo(1,29);ctx.lineTo(10,38);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='rgba(214,218,218,.24)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-18,30);ctx.lineTo(-17,61);ctx.moveTo(18,30);ctx.lineTo(17,61);ctx.stroke();
+  ctx.fillStyle=skin;ctx.fillRect(-8,12,16,12);ctx.beginPath();ctx.ellipse(0,4,18,20,0,0,7);ctx.fill();
+  // Broad cheeks, swept hair, small dark glasses and a thick curled moustache form a bold caricature.
+  ctx.fillStyle='rgba(234,171,126,.38)';ctx.beginPath();ctx.ellipse(-12,10,5,8,-.2,0,7);ctx.ellipse(12,10,5,8,.2,0,7);ctx.fill();
+  ctx.fillStyle='#211b19';ctx.beginPath();ctx.moveTo(-17,0);ctx.quadraticCurveTo(-20,-14,-10,-19);ctx.quadraticCurveTo(-3,-24,5,-19);ctx.quadraticCurveTo(15,-19,18,-9);ctx.lineTo(12,-11);ctx.quadraticCurveTo(4,-8,-2,-12);ctx.quadraticCurveTo(-8,-7,-15,1);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='rgba(193,193,181,.78)';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(-14,-11);ctx.quadraticCurveTo(-10,-17,-5,-18);ctx.moveTo(1,-19);ctx.quadraticCurveTo(8,-18,12,-14);ctx.stroke();
+  ctx.fillStyle='#211810';ctx.beginPath();ctx.ellipse(-17,7,2.6,5,0,0,7);ctx.ellipse(17,7,2.6,5,0,0,7);ctx.fill();
+  ctx.fillStyle='#b77954';ctx.beginPath();ctx.ellipse(0,8,5.4,7.5,0,0,7);ctx.fill();
+  ctx.fillStyle='#29282b';ctx.beginPath();ctx.ellipse(-7,1,7.4,5.4,-.06,0,7);ctx.ellipse(7,1,7.4,5.4,.06,0,7);ctx.fill();
+  ctx.strokeStyle='#151619';ctx.lineWidth=1.8;ctx.beginPath();ctx.ellipse(-7,1,7.4,5.4,-.06,0,7);ctx.ellipse(7,1,7.4,5.4,.06,0,7);ctx.moveTo(-.2,1);ctx.lineTo(.2,1);ctx.moveTo(-14,-1);ctx.lineTo(-18,-3);ctx.moveTo(14,-1);ctx.lineTo(18,-3);ctx.stroke();
+  ctx.strokeStyle='rgba(238,235,220,.52)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-12,-1);ctx.lineTo(-8,-3);ctx.moveTo(2,-2);ctx.lineTo(6,-4);ctx.stroke();
+  ctx.fillStyle='#211711';ctx.beginPath();ctx.moveTo(-3,10);ctx.quadraticCurveTo(-10,6,-14,12);ctx.quadraticCurveTo(-12,18,-6,16);ctx.quadraticCurveTo(0,21,6,16);ctx.quadraticCurveTo(13,19,15,12);ctx.quadraticCurveTo(10,6,3,10);ctx.quadraticCurveTo(0,13,-3,10);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='rgba(146,112,83,.55)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-11,12);ctx.quadraticCurveTo(-8,15,-5,14);ctx.moveTo(5,14);ctx.quadraticCurveTo(9,16,12,12);ctx.stroke();
   ctx.restore();
 }
 
@@ -795,28 +912,114 @@ export function drawHealOrb(x,y){
   ctx.fillText('+2',x,y+3); ctx.textAlign='left';
 }
 
-function drawMuna(x,y){ ctx.save(); ctx.translate(x,y+Math.sin(state.t/38)*0.8);
-  ctx.fillStyle='#c0392b'; ctx.fillRect(-9,18,18,34);
-  ctx.fillStyle='#1f7a4d'; ctx.fillRect(-9,40,18,12);
-  ctx.fillStyle='#c98a5e'; ctx.beginPath(); ctx.arc(0,10,9,0,7); ctx.fill();
-  ctx.fillStyle='#1a120a'; ctx.fillRect(-9,2,18,9);
-  ctx.fillStyle='#e02020'; ctx.beginPath(); ctx.arc(0,7,1.6,0,7); ctx.fill();
+export function drawMuna(x,y){ ctx.save(); ctx.translate(x,y+Math.sin(state.t/38)*0.8);
+  // Layered village dress and shawl, drawn with the same warm, inked shapes as Hari.
+  ctx.fillStyle='rgba(4,5,7,.26)';ctx.beginPath();ctx.ellipse(0,51,14,3,0,0,7);ctx.fill();
+  ctx.fillStyle='#2a1717';ctx.beginPath();ctx.moveTo(-8,19);ctx.lineTo(8,19);ctx.lineTo(13,49);ctx.quadraticCurveTo(0,54,-13,49);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#80352f';ctx.beginPath();ctx.moveTo(-7,19);ctx.lineTo(7,19);ctx.lineTo(10,46);ctx.lineTo(-10,46);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#285642';ctx.beginPath();ctx.moveTo(-9,38);ctx.lineTo(9,38);ctx.lineTo(12,49);ctx.quadraticCurveTo(0,53,-12,49);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='rgba(220,184,121,.68)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-8,43);ctx.lineTo(8,43);ctx.moveTo(-5,47);ctx.lineTo(-4,50);ctx.moveTo(2,47);ctx.lineTo(3,50);ctx.stroke();
+  ctx.fillStyle='#d8c8a9';ctx.beginPath();ctx.moveTo(-10,20);ctx.lineTo(-5,17);ctx.lineTo(1,32);ctx.lineTo(9,21);ctx.lineTo(13,24);ctx.lineTo(4,39);ctx.lineTo(-4,32);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='#8d594a';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(-5,23);ctx.lineTo(-1,31);ctx.lineTo(5,25);ctx.stroke();
+  // Dark hair is gathered into a high pony, echoing the supplied silhouette;
+  // the village dress and shawl above remain unchanged.
+  ctx.fillStyle='#21140f';ctx.beginPath();ctx.moveTo(-8,9);ctx.quadraticCurveTo(-13,-4,-3,-5);ctx.quadraticCurveTo(4,-8,9,-3);ctx.lineTo(8,13);ctx.lineTo(4,19);ctx.lineTo(-7,18);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(-7,1);ctx.quadraticCurveTo(-14,3,-13,12);ctx.lineTo(-11,21);ctx.quadraticCurveTo(-8,18,-8,13);ctx.lineTo(-4,5);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='rgba(137,89,55,.75)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-11,7);ctx.quadraticCurveTo(-10,13,-10,18);ctx.stroke();
+  ctx.fillStyle='#c98a5e';ctx.beginPath();ctx.ellipse(0,9,8.7,10.5,0,0,7);ctx.fill();
+  ctx.fillStyle='rgba(234,171,126,.45)';ctx.beginPath();ctx.ellipse(-5,11,2.1,3.8,-.3,0,7);ctx.fill();
+  ctx.fillStyle='#21140f';ctx.beginPath();ctx.moveTo(-8,7);ctx.quadraticCurveTo(-11,-3,-2,-5);ctx.quadraticCurveTo(4,-6,8,-1);ctx.lineTo(4,3);ctx.quadraticCurveTo(-2,0,-8,7);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#21140f';ctx.beginPath();ctx.moveTo(-5,-3);ctx.quadraticCurveTo(-14,-11,-9,-16);ctx.quadraticCurveTo(-2,-18,1,-9);ctx.quadraticCurveTo(-1,-4,-5,-3);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#963d32';ctx.beginPath();ctx.ellipse(-5,-5,2.1,1.4,-.4,0,7);ctx.fill();
+  ctx.fillStyle='#fff0dc';ctx.beginPath();ctx.ellipse(-3,7,1.8,1.25,0,0,7);ctx.ellipse(3,7,1.8,1.25,0,0,7);ctx.fill();
+  ctx.fillStyle='#24170f';ctx.beginPath();ctx.arc(-2.5,7,0.8,0,7);ctx.arc(3.5,7,0.8,0,7);ctx.fill();
+  ctx.strokeStyle='#573528';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-5,4);ctx.lineTo(-2,3);ctx.moveTo(2,3);ctx.lineTo(5,4);ctx.moveTo(0,8);ctx.lineTo(-1,12);ctx.lineTo(1,12);ctx.moveTo(-2,15);ctx.quadraticCurveTo(0,16.5,2.5,14.8);ctx.stroke();
+  ctx.fillStyle='rgba(177,87,67,.42)';ctx.beginPath();ctx.arc(-6,12,1.5,0,7);ctx.arc(6,12,1.5,0,7);ctx.fill();
+  ctx.fillStyle='#d8b879';ctx.beginPath();ctx.arc(-8,11,1.3,0,7);ctx.arc(8,11,1.3,0,7);ctx.fill();
   ctx.restore(); }
-function drawRaju(x,y){ ctx.save(); ctx.translate(x,y+Math.sin(state.t/30)*1.1);
-  ctx.fillStyle='#2b3a55'; ctx.fillRect(-9,18,18,34);
-  ctx.fillStyle='#d8d0c0'; ctx.fillRect(-5,18,10,16);
-  ctx.fillStyle='#c98a5e'; ctx.beginPath(); ctx.arc(0,10,9,0,7); ctx.fill();
-  ctx.fillStyle='#15110b'; ctx.fillRect(-9,1,18,8);
-  ctx.fillStyle='#111'; ctx.fillRect(-7,7,14,3);
+export function drawRaju(x,y){ ctx.save(); ctx.translate(x,y+Math.sin(state.t/30)*1.1);
+  ctx.fillStyle='rgba(4,5,7,.24)';ctx.beginPath();ctx.ellipse(0,51,13,3,0,0,7);ctx.fill();
+  ctx.fillStyle='#d8d1c0';ctx.beginPath();ctx.moveTo(-8,42);ctx.lineTo(-1,42);ctx.lineTo(-2,51);ctx.lineTo(-8,51);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(1,42);ctx.lineTo(8,42);ctx.lineTo(8,51);ctx.lineTo(2,51);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#17191d';ctx.beginPath();ctx.moveTo(-9,50);ctx.lineTo(-2,50);ctx.lineTo(-2,53);ctx.lineTo(-10,53);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(2,50);ctx.lineTo(9,50);ctx.lineTo(11,53);ctx.lineTo(2,53);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#1e2a3a';ctx.beginPath();ctx.moveTo(-9,18);ctx.lineTo(9,18);ctx.lineTo(12,46);ctx.lineTo(-12,46);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#40536c';ctx.beginPath();ctx.moveTo(-8,20);ctx.lineTo(0,23);ctx.lineTo(7,20);ctx.lineTo(9,43);ctx.lineTo(-9,43);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#d9cdb6';ctx.beginPath();ctx.moveTo(-5,18);ctx.lineTo(0,24);ctx.lineTo(5,18);ctx.lineTo(3,37);ctx.lineTo(-3,37);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='rgba(174,153,117,.7)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-8,40);ctx.lineTo(8,40);ctx.moveTo(0,27);ctx.lineTo(0,38);ctx.stroke();
+  ctx.fillStyle='#a27650';ctx.fillRect(-10,16,20,4);ctx.fillStyle='#caa84e';ctx.fillRect(-2,17,4,3);
+  // A small Dhaka topi gives Raju a silhouette distinct from Muna's ponytail.
+  ctx.fillStyle='#b87a56';ctx.beginPath();ctx.ellipse(0,9,8.6,10.2,0,0,7);ctx.fill();
+  ctx.fillStyle='rgba(225,158,115,.4)';ctx.beginPath();ctx.ellipse(-5,11,1.8,3,-.3,0,7);ctx.fill();
+  ctx.fillStyle='#38241b';ctx.beginPath();ctx.ellipse(-8,9,1.6,3,0,0,7);ctx.ellipse(8,9,1.6,3,0,0,7);ctx.fill();
+  drawTopi(0,1,9,'#252c38');
+  ctx.strokeStyle='rgba(181,151,112,.7)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-6,-4);ctx.quadraticCurveTo(0,-6,6,-4);ctx.stroke();
+  ctx.fillStyle='#fff0dc';ctx.beginPath();ctx.ellipse(-3,7,1.8,1.25,0,0,7);ctx.ellipse(3,7,1.8,1.25,0,0,7);ctx.fill();
+  ctx.fillStyle='#24170f';ctx.beginPath();ctx.arc(-2.5,7,0.8,0,7);ctx.arc(3.5,7,0.8,0,7);ctx.fill();
+  ctx.strokeStyle='#422c20';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-5,5);ctx.lineTo(-2,4);ctx.moveTo(2,4);ctx.lineTo(5,5);ctx.moveTo(0,8);ctx.lineTo(-1,12);ctx.lineTo(1,12);ctx.stroke();
+  ctx.fillStyle='#493025';ctx.beginPath();ctx.moveTo(-2,14);ctx.quadraticCurveTo(-5,12,-6,15);ctx.quadraticCurveTo(-3,17,0,16);ctx.quadraticCurveTo(4,17,6,15);ctx.quadraticCurveTo(4,12,2,14);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='#422c20';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(-2,18);ctx.quadraticCurveTo(0,19,2,18);ctx.stroke();
   ctx.restore(); }
 
+// A village messenger, with a wrapped shawl and warm earth-tone clothing so
+// the silhouette is distinct from Raju's blue jacket and topi.
+export function drawVillager(x,y,run=0){
+  const step=Math.sin(run)*3;
+  ctx.save();ctx.translate(x,y+Math.sin(state.t/24)*0.7);
+  ctx.strokeStyle='#34251d';ctx.lineWidth=4;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(-4,43);ctx.lineTo(-6+step,52);ctx.moveTo(4,43);ctx.lineTo(7-step,52);ctx.stroke();
+  ctx.fillStyle='#985b3f';ctx.beginPath();ctx.moveTo(-10,17);ctx.lineTo(10,17);ctx.lineTo(13,45);ctx.lineTo(-13,45);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#c7a66d';ctx.beginPath();ctx.moveTo(-9,19);ctx.lineTo(9,19);ctx.lineTo(4,33);ctx.lineTo(-11,29);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#c98a5e';ctx.beginPath();ctx.arc(0,9,9,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#574038';ctx.beginPath();ctx.arc(0,7,10,Math.PI,Math.PI*2);ctx.fill();ctx.fillRect(-10,6,20,4);
+  ctx.fillStyle='#2b201b';ctx.fillRect(3,8,3,2);
+  ctx.strokeStyle='#c7a66d';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(-7,23);ctx.lineTo(-16,33+step);ctx.moveTo(7,23);ctx.lineTo(15,20);ctx.stroke();
+  ctx.restore();
+}
+
+// A small obstacle rooted in the village's everyday life: woolly coat, curved
+// horns, pack blanket and a readable lowered-head charge tell the player to jump.
+export function drawYak(yak){
+  const t=yak.anim||0, charging=yak.state==='charge', warning=yak.state==='warn';
+  const bob=yak.state==='graze'?Math.sin(t)*1.2:charging?Math.abs(Math.sin(t*1.5))*2:0;
+  ctx.save();ctx.translate(yak.x+yak.w/2,yak.y+4+bob);ctx.scale(yak.dir||1,1);
+  ctx.fillStyle='rgba(3,4,6,.32)';ctx.beginPath();ctx.ellipse(0,45,36,5,0,0,7);ctx.fill();
+  if(charging){ctx.fillStyle='rgba(205,103,62,.16)';ctx.beginPath();ctx.ellipse(-8,26,42,25,0,0,7);ctx.fill();}
+  // shaggy body layered in the game's muted brown and parchment palette
+  ctx.fillStyle='#30251f';ctx.beginPath();ctx.ellipse(-2,25,32,19,0,0,7);ctx.fill();
+  ctx.fillStyle='#65503d';ctx.beginPath();ctx.ellipse(-4,20,28,15,0,0,7);ctx.fill();
+  for(let i=0;i<9;i++){const xx=-27+i*6.5, yy=27+Math.sin(i*1.8)*4;
+    ctx.fillStyle=i%2?'#4b3a2e':'#786047';ctx.beginPath();ctx.ellipse(xx,yy,7,11,0.25,0,7);ctx.fill();}
+  // long fringe and mantle break the body into clear, drawable planes
+  ctx.fillStyle='#33251e';ctx.beginPath();ctx.moveTo(-25,12);ctx.quadraticCurveTo(-7,-3,11,12);ctx.lineTo(23,37);ctx.lineTo(13,35);ctx.lineTo(5,42);ctx.lineTo(-4,35);ctx.lineTo(-14,40);ctx.lineTo(-24,30);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#8e704d';ctx.beginPath();ctx.moveTo(-16,9);ctx.lineTo(5,7);ctx.lineTo(17,15);ctx.lineTo(8,20);ctx.lineTo(-8,17);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='#b29a70';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(-12,11);ctx.lineTo(5,12);ctx.lineTo(12,17);ctx.stroke();
+  // pack blanket and tied bundles; a small village cargo animal, not a fantasy beast
+  ctx.fillStyle='#713a32';ctx.beginPath();ctx.moveTo(-20,7);ctx.lineTo(7,5);ctx.lineTo(12,17);ctx.lineTo(-16,19);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#b38b58';ctx.fillRect(-15,10,22,2);ctx.fillRect(-11,15,17,2);
+  ctx.fillStyle='#49372a';ctx.beginPath();ctx.moveTo(20,15);ctx.quadraticCurveTo(34,12,36,25);ctx.lineTo(29,34);ctx.lineTo(18,30);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#a17b54';ctx.beginPath();ctx.ellipse(31,25,7,8,0.25,0,7);ctx.fill();
+  ctx.fillStyle='#211913';ctx.beginPath();ctx.ellipse(35,28,5,4,0,0,7);ctx.fill();
+  ctx.strokeStyle='#d1bc91';ctx.lineWidth=2.3;ctx.lineCap='round';ctx.beginPath();
+  ctx.moveTo(25,18);ctx.quadraticCurveTo(25,8,18,8);ctx.moveTo(27,18);ctx.quadraticCurveTo(32,8,37,12);ctx.stroke();
+  ctx.fillStyle='#eee0c0';ctx.beginPath();ctx.arc(23,12,1.8,0,7);ctx.arc(32,13,1.8,0,7);ctx.fill();
+  ctx.fillStyle='#171311';ctx.beginPath();ctx.arc(32,24,1.3,0,7);ctx.fill();
+  ctx.strokeStyle='#231a14';ctx.lineWidth=5;ctx.lineCap='round';
+  for(let i=0;i<4;i++){const lx=-22+i*14, phase=Math.sin(t+i*Math.PI)*2.5;
+    ctx.beginPath();ctx.moveTo(lx,31);ctx.lineTo(lx+phase,43);ctx.lineTo(lx+phase+(charging?3:0),46);ctx.stroke();}
+  if(warning){ctx.strokeStyle=`rgba(223,161,92,${.4+.3*Math.sin(state.t/3)})`;ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(3,23,39,26,0,0,7);ctx.stroke();}
+  ctx.restore();
+}
+
 export function drawCage(){
-  ctx.fillStyle='#5a4632'; ctx.fillRect(cage.x-34,cage.y-44,68,6);
-  ctx.fillStyle='#3c2c1c'; ctx.fillRect(cage.x-40,cage.y-50,80,8);
-  ctx.fillStyle='#6b5236'; ctx.fillRect(cage.x-34,cage.y+18,8,8); ctx.fillRect(cage.x+26,cage.y+18,8,8);
-  if(boss.alive){ ctx.strokeStyle='#8a8a8a'; ctx.lineWidth=2;
-    for(let i=-3;i<=3;i++){ ctx.beginPath(); ctx.moveTo(cage.x+i*10,cage.y-44); ctx.lineTo(cage.x+i*10,cage.y+24); ctx.stroke(); } }
-  if(state.scene==='play') drawMuna(cage.x, GROUND-52);
+  const x=cage.x,y=cage.y??GROUND-52,floorY=y+52;
+  if(state.scene==='play'){
+    ctx.fillStyle='#594334';ctx.fillRect(x-4,floorY-66,8,63);
+    ctx.fillStyle='#79583c';ctx.fillRect(x-13,floorY-66,26,5);
+    drawMuna(x,y);
+    ctx.strokeStyle='#a78a65';ctx.lineWidth=3;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(x-10,y+25);ctx.lineTo(x+10,y+25);ctx.moveTo(x-10,y+39);ctx.lineTo(x+10,y+39);ctx.stroke();
+    ctx.beginPath();ctx.ellipse(x,y+25,7,3,0,0,Math.PI*2);ctx.ellipse(x,y+39,7,3,0,0,Math.PI*2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(x+9,y+25);ctx.quadraticCurveTo(x+24,y+32,x+4,floorY-40);ctx.stroke();
+  }
 }
 
 export function drawCutsceneActors(){
@@ -856,37 +1059,200 @@ export function drawPaper(x,y){ ctx.save(); ctx.translate(x,y+Math.sin(state.t/1
   for(let i=-2;i<=2;i++){ ctx.beginPath(); ctx.moveTo(-6,i*4); ctx.lineTo(6,i*4); ctx.stroke(); }
   ctx.restore(); }
 
-function drawHouse(x,baseY){ ctx.save(); ctx.translate(x,baseY);
-  ctx.fillStyle='#a85f37'; ctx.fillRect(-22,-34,44,34);
-  ctx.fillStyle='#7a4426'; ctx.fillRect(-22,-12,44,12);
-  ctx.fillStyle='#42474f'; ctx.beginPath(); ctx.moveTo(-28,-34); ctx.lineTo(0,-52); ctx.lineTo(28,-34); ctx.fill();
-  ctx.fillStyle='#2a64b0'; ctx.fillRect(-15,-28,8,9); ctx.fillRect(7,-28,8,9);
-  ctx.fillStyle='#3a2418'; ctx.fillRect(-5,-18,10,18);
-  // chimney smoke
-  for(let i=0;i<4;i++){
-    const p=(state.t/22+i*1.6)%6;
-    ctx.fillStyle=`rgba(220,220,220,${0.22*(1-p/6)})`;
-    ctx.beginPath(); ctx.arc(14+Math.sin(p*1.4)*5, -52-p*9, 3+p*1.6, 0, 7); ctx.fill();
-  }
-  ctx.restore(); }
+export function drawHouse(x,baseY,s=1){
+  ctx.save();ctx.translate(x,baseY);ctx.scale(s,s);
+  // Compact Upper Mustang mud-brick home: whitewashed walls, timber lintels,
+  // flat roof/parapet, and winter firewood stored along the roof edge.
+  ctx.fillStyle='rgba(10,9,9,.28)';ctx.beginPath();ctx.ellipse(0,-1,39,5,0,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#4b4038';ctx.fillRect(-32,-46,64,46);
+  ctx.fillStyle='#9d8b75';ctx.fillRect(-29,-44,58,40);
+  ctx.fillStyle='#c0ad91';ctx.fillRect(-29,-44,4,40);ctx.fillRect(25,-44,4,40);
+  ctx.fillStyle='#796451';ctx.fillRect(-35,-50,70,7);
+  ctx.fillStyle='#52483e';ctx.fillRect(-35,-47,70,3);
+  // low mud parapet leaves a believable continuous walking surface behind it
+  ctx.fillStyle='#a18b70';ctx.fillRect(-34,-56,6,8);ctx.fillRect(28,-56,6,8);
+  ctx.fillRect(-34,-56,10,4);ctx.fillRect(24,-56,10,4);
+  // stacked juniper/firewood, kept in one short roof-end bundle
+  ctx.fillStyle='#392f29';ctx.fillRect(-18,-55,35,4);
+  ctx.strokeStyle='#8a7058';ctx.lineWidth=1.3;
+  for(let i=0;i<6;i++){const xx=-17+i*6;ctx.beginPath();ctx.moveTo(xx,-55);ctx.lineTo(xx,-51);ctx.stroke();}
+  // deeply set windows with simple timber lintels
+  ctx.fillStyle='#342f2b';ctx.fillRect(-23,-37,12,11);ctx.fillRect(11,-37,12,11);
+  ctx.fillStyle='#81725f';ctx.fillRect(-21,-35,8,7);ctx.fillRect(13,-35,8,7);
+  ctx.fillStyle='#46372c';ctx.fillRect(-8,-25,16,25);
+  ctx.fillStyle='#725039';ctx.fillRect(-6,-23,12,23);ctx.fillStyle='#b89a6a';ctx.fillRect(3,-13,2,2);
+  // small ochre lintel, no tall chimney: roofs are used for storage and drying.
+  ctx.fillStyle='#735845';ctx.fillRect(-25,-41,16,3);ctx.fillRect(9,-41,16,3);
+  ctx.restore();
+}
 
-function drawBoudha(cx,baseY){ ctx.save(); ctx.translate(cx,baseY);
-  ctx.fillStyle='#e9e6df'; ctx.fillRect(-46,-6,92,8);
-  ctx.fillStyle='#f2efe9'; ctx.beginPath(); ctx.arc(0,-4,42,Math.PI,0); ctx.fill();
-  ctx.fillStyle='#efe9da'; ctx.fillRect(-15,-58,30,22); ctx.fillStyle='#d9b23a'; ctx.fillRect(-15,-58,30,3);
-  ctx.fillStyle='#1c3a6e'; ctx.fillRect(-11,-52,7,4); ctx.fillRect(4,-52,7,4);
-  ctx.fillStyle='#2a64b0'; ctx.fillRect(-9,-51,3,2); ctx.fillRect(6,-51,3,2);
-  ctx.fillStyle='#d9b23a'; ctx.beginPath(); ctx.moveTo(-9,-58); ctx.lineTo(9,-58); ctx.lineTo(4,-80); ctx.lineTo(-4,-80); ctx.fill();
-  ctx.fillStyle='#f0d050'; ctx.fillRect(-2,-88,4,8);
-  ctx.strokeStyle='rgba(200,180,120,0.5)'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(0,-84); ctx.lineTo(-60,-30); ctx.moveTo(0,-84); ctx.lineTo(60,-30); ctx.stroke();
-  const fc=['#c0392b','#2980b9','#27ae60','#f1c40f'];
-  for(let i=1;i<8;i++){ ctx.fillStyle=fc[i%4];
-    const fl=Math.sin(state.t/18+i)*1.2;
-    ctx.fillRect(-60+i*7.5,-30+i*6.7+fl,5,4); ctx.fillRect(55-i*7.5,-30+i*6.7+fl,5,4); }
-  ctx.restore(); }
+export function drawDaraj(x,baseY,open=0){
+  ctx.save();ctx.translate(x,baseY);
+  ctx.fillStyle='#493126';ctx.fillRect(-32,-51,64,51);
+  ctx.fillStyle='#80583b';ctx.fillRect(-35,-55,70,7);ctx.fillRect(-28,-47,5,42);ctx.fillRect(23,-47,5,42);
+  ctx.fillStyle='#68452f';ctx.fillRect(-23,-42,46,25);
+  ctx.fillStyle='#b87849';ctx.fillRect(-21,-40,42,21);ctx.fillStyle='#c9955c';ctx.fillRect(-3,-31,6,3);
+  if(open>0){
+    ctx.fillStyle='#80583b';ctx.fillRect(-27,-46-open*13,54,9);
+    ctx.fillStyle='#2a211c';ctx.fillRect(-22,-43-open*13,44,18);
+    if(open>.55)drawBlade(-4,-34-open*13,0,'#e3e6e9');
+  }
+  ctx.restore();
+}
+
+export function drawBoudha(cx,baseY,s=1){
+  ctx.save();ctx.translate(cx,baseY);ctx.scale(s,s);
+  // A small valley chorten silhouette, unlike Kathmandu's great hemispherical stupa.
+  ctx.fillStyle='rgba(8,7,7,.3)';ctx.beginPath();ctx.ellipse(0,-1,37,5,0,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#a2927b';ctx.fillRect(-34,-12,68,12);
+  ctx.fillStyle='#ddd1b7';ctx.fillRect(-29,-23,58,12);
+  ctx.fillStyle='#d7c8ab';ctx.beginPath();ctx.moveTo(-25,-23);ctx.lineTo(-20,-39);ctx.quadraticCurveTo(0,-53,20,-39);ctx.lineTo(25,-23);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#f0e4ca';ctx.fillRect(-15,-49,30,11);
+  ctx.fillStyle='#8c3930';ctx.fillRect(-12,-47,24,2);ctx.fillRect(-12,-42,24,2);
+  ctx.fillStyle='#b49b76';ctx.beginPath();ctx.moveTo(-8,-49);ctx.lineTo(8,-49);ctx.lineTo(4,-68);ctx.lineTo(-4,-68);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#d5b56d';ctx.fillRect(-2,-77,4,10);ctx.fillRect(-5,-69,10,2);
+  ctx.fillStyle='#806c54';ctx.fillRect(-39,-13,78,3);
+  ctx.restore();
+}
+
+export function drawHomeCutaway(x,baseY){
+  ctx.save();ctx.translate(x,baseY);
+  ctx.fillStyle='#51473c';ctx.fillRect(-82,-94,164,94);
+  ctx.fillStyle='#b19c7d';ctx.fillRect(-78,-90,156,86);
+  ctx.fillStyle='#433b34';ctx.fillRect(-71,-79,142,75);
+  ctx.fillStyle='#6b5945';ctx.fillRect(-86,-98,172,8);
+  ctx.fillStyle='#8e785b';ctx.fillRect(-81,-104,12,8);ctx.fillRect(69,-104,12,8);
+  ctx.fillStyle='#4a3326';ctx.fillRect(-65,-70,31,34);ctx.fillStyle='#77583a';ctx.fillRect(-61,-66,23,26);
+  ctx.fillStyle='#806044';ctx.fillRect(43,-69,22,69);ctx.fillStyle='#bd9660';ctx.fillRect(46,-65,16,62);
+  ctx.fillStyle='#d6b776';ctx.fillRect(-51,-32,17,3);ctx.fillRect(-47,-29,3,13);
+  ctx.restore();
+}
+
+export function drawForegroundVillage(){
+  for(const [x,s] of VILLAGE_HOUSES) drawHouse(x,GROUND,s);
+  drawBoudha(STUPA_X,GROUND,STUPA_SCALE);
+}
+
+export function drawDungeonBackdrop(alpha=1){
+  if(alpha<=0)return;
+  ctx.save();ctx.globalAlpha=Math.min(1,alpha);
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#090b10');g.addColorStop(.5,'#171516');g.addColorStop(1,'#211914');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  // broken cave roof silhouettes frame the room without obscuring actors
+  ctx.fillStyle='#08090d';ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(W,0);ctx.lineTo(W,40);
+  for(let x=W;x>=0;x-=42)ctx.lineTo(x,38+Math.sin(x*.035)*13+((x*17)%11));
+  ctx.closePath();ctx.fill();
+  ctx.fillStyle='rgba(104,55,35,.1)';
+  for(let i=0;i<5;i++){ctx.beginPath();ctx.ellipse((i*211+70)%W,95+(i%3)*67,90,38,0,0,Math.PI*2);ctx.fill();}
+  ctx.restore();
+}
+
+export function drawDungeonArchitecture(underground=true){
+  if(!underground){
+    // From the surface the descent reads as a narrow carved stair-mouth, not a
+    // giant underground room bleeding through the village.
+    ctx.fillStyle='#514238';ctx.beginPath();ctx.moveTo(DUNGEON_ENTRY_X-20,GROUND+10);
+    ctx.lineTo(DUNGEON_ENTRY_X-12,GROUND-25);ctx.lineTo(DUNGEON_ENTRY_X+8,GROUND-44);
+    ctx.lineTo(DUNGEON_ENTRY_END-8,GROUND-44);ctx.lineTo(DUNGEON_ENTRY_END+12,GROUND-25);
+    ctx.lineTo(DUNGEON_ENTRY_END+20,GROUND+10);ctx.lineTo(DUNGEON_ENTRY_END-4,GROUND+10);
+    ctx.lineTo(DUNGEON_ENTRY_END-12,GROUND-8);ctx.lineTo(DUNGEON_ENTRY_X+12,GROUND-8);
+    ctx.lineTo(DUNGEON_ENTRY_X+4,GROUND+10);ctx.closePath();ctx.fill();
+    ctx.fillStyle='#201a18';ctx.fillRect(DUNGEON_ENTRY_X+12,GROUND-6,DUNGEON_ENTRY_END-DUNGEON_ENTRY_X-24,12);
+    for(const x of [DUNGEON_ENTRY_X+30,DUNGEON_ENTRY_END-30]){
+      ctx.fillStyle='#332923';ctx.fillRect(x-3,GROUND-25,6,20);ctx.fillStyle='#f0ad59';ctx.fillRect(x-2,GROUND-22,4,5);
+    }
+    return;
+  }
+  const x0=DUNGEON_ENTRY_X-72;
+  // The tunnel and boss room are cut into a continuous rock chamber below the village.
+  ctx.fillStyle='#171514';ctx.fillRect(x0,GROUND-44,WORLD-x0,DUNGEON_FLOOR-GROUND+84);
+  ctx.fillStyle='#211c19';ctx.beginPath();ctx.moveTo(x0,GROUND-44);ctx.lineTo(x0+40,GROUND-72);
+  for(let x=x0+40;x<=WORLD;x+=80)ctx.lineTo(x,GROUND-63+Math.sin(x*.013)*11);
+  ctx.lineTo(WORLD,DUNGEON_FLOOR);ctx.lineTo(x0,DUNGEON_FLOOR);ctx.closePath();ctx.fill();
+  // Rock bands and joints bring the chamber walls into the same layered geology.
+  ctx.strokeStyle='rgba(151,111,79,.2)';ctx.lineWidth=2;
+  for(let y=GROUND-24;y<DUNGEON_FLOOR-12;y+=26){
+    ctx.beginPath();ctx.moveTo(x0+8,y+Math.sin(y)*4);ctx.lineTo(WORLD,y+Math.sin(y*.7)*5);ctx.stroke();
+  }
+  // Descending masonry steps are part of the cave stair, not floating blocks.
+  for(const s of DUNGEON_STEPS){
+    ctx.fillStyle='#332d28';ctx.fillRect(s.x,s.y+12,s.w,DUNGEON_FLOOR-s.y-12);
+    ctx.fillStyle='#92806a';ctx.fillRect(s.x+10,s.y-2,s.w-18,4);
+    ctx.strokeStyle='rgba(139,112,87,.38)';ctx.lineWidth=1;
+    for(let yy=s.y+25;yy<DUNGEON_FLOOR;yy+=18){ctx.beginPath();ctx.moveTo(s.x+4,yy);ctx.lineTo(s.x+s.w-5,yy);ctx.stroke();}
+  }
+  for(const shelf of DUNGEON_ALCOVES){
+    ctx.fillStyle='#39312c';ctx.fillRect(shelf.x,shelf.y+8,shelf.w,14);
+    ctx.fillStyle='#77644e';ctx.fillRect(shelf.x-5,shelf.y,shelf.w+10,9);
+  }
+  // Stone chamber floor and a worn circular seal where the minister waits.
+  ctx.fillStyle='#4a3c31';ctx.fillRect(DUNGEON_ENTRY_X-10,DUNGEON_FLOOR,WORLD-DUNGEON_ENTRY_X+10,40);
+  ctx.fillStyle='#78614a';ctx.fillRect(DUNGEON_ENTRY_X-10,DUNGEON_FLOOR,WORLD-DUNGEON_ENTRY_X+10,4);
+  ctx.strokeStyle='rgba(177,137,91,.35)';ctx.lineWidth=1.5;
+  for(let x=DUNGEON_ENTRY_X;x<WORLD;x+=46){ctx.beginPath();ctx.moveTo(x,DUNGEON_FLOOR+7);ctx.lineTo(x+28,DUNGEON_FLOOR+7);ctx.lineTo(x+34,DUNGEON_FLOOR+22);ctx.stroke();}
+  ctx.strokeStyle='rgba(185,124,69,.48)';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(DUNGEON_BOSS_ROOM_START+330,DUNGEON_FLOOR-2,96,20,0,0,Math.PI*2);ctx.stroke();
+  // The two long gaps are collapsed sections of the old drainage walk. They are
+  // dark shafts, not floating blocks; their lips remain visible from either side.
+  for(const [a,b] of DUNGEON_PITS){
+    ctx.fillStyle='#090a0d';ctx.fillRect(a,DUNGEON_FLOOR,b-a,150);
+    ctx.fillStyle='#211a17';ctx.fillRect(a-7,DUNGEON_FLOOR-3,12,8);ctx.fillRect(b-5,DUNGEON_FLOOR-3,12,8);
+    ctx.strokeStyle='rgba(146,110,78,.35)';ctx.lineWidth=2;
+    for(let x=a+10;x<b;x+=27){ctx.beginPath();ctx.moveTo(x,DUNGEON_FLOOR+15);ctx.lineTo(x-4,DUNGEON_FLOOR+92);ctx.stroke();}
+    const mist=ctx.createLinearGradient(0,DUNGEON_FLOOR+26,0,DUNGEON_FLOOR+148);
+    mist.addColorStop(0,'rgba(142,98,75,.13)');mist.addColorStop(1,'rgba(142,98,75,0)');
+    ctx.fillStyle=mist;ctx.fillRect(a,DUNGEON_FLOOR+26,b-a,122);
+  }
+  // A wider carved arch marks the transition from the old service tunnel into
+  // the minister's sealed chamber. It is architectural framing, not a platform.
+  for(const x of [DUNGEON_BOSS_ROOM_START,DUNGEON_BOSS_ROOM_START+1040]){
+    ctx.fillStyle='#302720';ctx.fillRect(x-16,GROUND-38,32,DUNGEON_FLOOR-GROUND+38);
+    ctx.fillStyle='#68513d';ctx.fillRect(x-21,GROUND-42,42,8);
+    ctx.strokeStyle='rgba(190,148,99,.36)';ctx.lineWidth=2;
+    for(let y=GROUND-22;y<DUNGEON_FLOOR-2;y+=23){ctx.beginPath();ctx.moveTo(x-15,y);ctx.lineTo(x+15,y+5);ctx.stroke();}
+    ctx.fillStyle='rgba(135,75,45,.18)';ctx.fillRect(x-34,GROUND-34,68,13);
+  }
+  for(const tx of [4780,6100,7000,7660]){
+    const ty=DUNGEON_FLOOR+10;
+    const glow=ctx.createRadialGradient(tx,ty,3,tx,ty,86+Math.sin(state.t/8+tx)*6);
+    glow.addColorStop(0,'rgba(255,177,92,.28)');glow.addColorStop(1,'rgba(219,105,47,0)');ctx.fillStyle=glow;ctx.fillRect(tx-90,ty-90,180,180);
+    ctx.fillStyle='#4d392c';ctx.fillRect(tx-5,ty-4,10,18);ctx.fillStyle='#f4b35e';
+    ctx.beginPath();ctx.ellipse(tx,ty-8,4,7,0,0,Math.PI*2);ctx.fill();
+  }
+  // Recessed ancestor niches along the wall imply older chambers beyond the boss room.
+  for(const nx of [4930,5850,6920,8020]){
+    ctx.fillStyle='#100f11';ctx.beginPath();ctx.arc(nx,DUNGEON_FLOOR-37,14,Math.PI,0);ctx.lineTo(nx+14,DUNGEON_FLOOR-1);ctx.lineTo(nx-14,DUNGEON_FLOOR-1);ctx.closePath();ctx.fill();
+    ctx.fillStyle='#6d4d39';ctx.fillRect(nx-3,DUNGEON_FLOOR-23,6,15);
+  }
+}
+
+export function drawSceneGrade(){
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'rgba(5,10,19,.38)');g.addColorStop(.55,'rgba(8,11,16,.32)');g.addColorStop(1,'rgba(4,5,8,.48)');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+}
 
 /* ---- HUD ---- */
+// One consistent visual language for every on-screen input hint: PS face
+// buttons are colored circles; keyboard keys are outlined keycaps.
+export function drawControlBadge(key,cx,cy,controller=state.controlMode==='controller',scale=1){
+  const colors={'✕':'#86b9ef','□':'#e4a0cf','○':'#ed827c','△':'#89cf9a'};
+  const face=controller&&colors[key];
+  ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
+  let w;
+  if(face){
+    const r=10*scale;w=r*2;ctx.fillStyle='rgba(7,12,20,.96)';ctx.strokeStyle=colors[key];ctx.lineWidth=1.5*scale;
+    ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.fillStyle=colors[key];ctx.font=`bold ${12*scale}px "Segoe UI Symbol","Segoe UI",system-ui`;ctx.fillText(key,cx,cy+.5*scale);
+  }else{
+    ctx.font=`bold ${9*scale}px "Segoe UI",system-ui`;w=Math.max(24*scale,ctx.measureText(key).width+10*scale);
+    const h=17*scale;ctx.fillStyle='rgba(7,12,20,.96)';ctx.strokeStyle=controller?'rgba(216,187,129,.82)':'rgba(191,204,216,.78)';ctx.lineWidth=scale;
+    ctx.beginPath();ctx.roundRect(cx-w/2,cy-h/2,w,h,4*scale);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#f1e8d8';ctx.fillText(key,cx,cy+.5*scale);
+  }
+  ctx.restore();return w;
+}
+
 export function drawHUD(){
   // HP hearts — 10 max, two rows if needed
   for(let i=0;i<player.maxHp;i++){
@@ -895,16 +1261,18 @@ export function drawHUD(){
     ctx.fillRect(14+col*17,14+row*18,13,13);
   }
   drawMomo(26,50,0.95); ctx.fillStyle='#e8d9b5'; ctx.font='bold 15px system-ui'; ctx.fillText('× '+player.coins,40,55);
-  // ult (iai) charges
-  ctx.fillStyle='#e8d9b5'; ctx.font='bold 15px system-ui'; ctx.fillText('iai:',14,77);
+  // Ultimate charge pips
+  ctx.fillStyle='#e8d9b5'; ctx.font='bold 12px system-ui'; ctx.fillText('ULTIMATE:',14,77);
   for(let i=0;i<3;i++){
     const lit=i<player.charges;
     ctx.fillStyle=lit?'#ffd24a':'#3a3a3a';
-    ctx.beginPath(); ctx.arc(50+i*16,72,6,0,7); ctx.fill();
+    ctx.beginPath(); ctx.arc(86+i*16,72,6,0,7); ctx.fill();
     if(lit){ ctx.strokeStyle=`rgba(255,210,74,${0.35+0.35*Math.sin(state.t/9+i)})`;
-      ctx.lineWidth=2; ctx.beginPath(); ctx.arc(50+i*16,72,9,0,7); ctx.stroke(); }
+      ctx.lineWidth=2; ctx.beginPath(); ctx.arc(86+i*16,72,9,0,7); ctx.stroke(); }
   }
-  if(player.charges>=1){ ctx.fillStyle='#ffd24a'; ctx.font='11px system-ui'; ctx.fillText('E!',100,76); }
+  ctx.save();ctx.globalAlpha=player.charges>=1?1:.42;
+  drawControlBadge(state.controlMode==='controller'?'△':'E',151,72,state.controlMode==='controller',.9);
+  ctx.restore();
 
   // difficulty label
   ctx.fillStyle='rgba(232,217,181,0.6)'; ctx.font='11px system-ui';
@@ -946,16 +1314,19 @@ export function drawHUD(){
     ctx.fillStyle=boss.stagger>0?'#ffffff':ppct>0.75?'#ff7a30':'#ffd24a';
     ctx.fillRect(bx,by+13,bw*ppct,4);
     ctx.fillStyle='#e8d9b5'; ctx.font='13px system-ui'; ctx.textAlign='center';
-    ctx.fillText('Bhrasta Mantri · Phase '+boss.phase,W/2,44);
+    ctx.fillText('Prachanda · Phase '+boss.phase,W/2,44);
     if(boss.stagger>0){ ctx.fillStyle=`rgba(255,80,80,${0.6+0.4*Math.sin(state.t/4)})`;
       ctx.font='bold 13px system-ui'; ctx.fillText('SUSTAYO — prahar gara!',W/2,58); }
     ctx.textAlign='left';
   }
   if(state.muted){ ctx.fillStyle='#e8d9b5'; ctx.font='12px system-ui'; ctx.fillText('muted (M)',W-90,22); }
   if(state.won && boss && !boss.alive && Math.abs(player.x-cage.x)<90 && state.scene==='play'){
-    ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(W/2-130,H-118,260,28);
-    ctx.fillStyle='#9fe06a'; ctx.font='bold 15px system-ui'; ctx.textAlign='center';
-    ctx.fillText('Press F — Munalai fukau',W/2,H-99); ctx.textAlign='left'; }
+    const cx=W/2,cy=H-104;
+    ctx.fillStyle='rgba(0,0,0,.62)';ctx.fillRect(cx-90,cy-17,180,34);
+    ctx.strokeStyle='rgba(190,148,99,.68)';ctx.lineWidth=1;ctx.strokeRect(cx-90,cy-17,180,34);
+    drawControlBadge(state.controlMode==='controller'?'✕':'Enter',cx-28,cy,state.controlMode==='controller');
+    ctx.fillStyle='#9fe06a';ctx.font='bold 13px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
+    ctx.fillText('Action',cx+2,cy);ctx.textAlign='left';ctx.textBaseline='alphabetic'; }
 }
 
 /* Right-side feedback stack. No boxes or panels — just shadowed text so it
@@ -985,10 +1356,24 @@ export function drawToasts(){
 }
 
 export function drawSubtitle(){
+  // Keep the boss arena free of dialogue text once Enter has started combat.
+  if(state.scene==='play'&&boss.active&&boss.started&&boss.alive) return;
   if(sub.t<=0) return;
   const a=Math.min(1,sub.t/20);
   ctx.save(); ctx.globalAlpha=a;
   ctx.font='bold 18px "Segoe UI",system-ui';
+  if(state.scene==='cutscene'){
+    ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineWidth=4;ctx.lineJoin='round';
+    ctx.strokeStyle='rgba(0,0,0,.88)';ctx.shadowColor='#000';ctx.shadowBlur=5;
+    const max=W-76,lines=[''];
+    for(const word of sub.text.split(/\s+/)){
+      const n=lines.length-1,trial=lines[n]?lines[n]+' '+word:word;
+      if(ctx.measureText(trial).width>max&&lines[n])lines.push(word);else lines[n]=trial;
+    }
+    const shown=lines.slice(-2),firstY=shown.length===1?H-40:H-55;
+    shown.forEach((line,i)=>{const y=firstY+i*21;ctx.strokeText(line,W/2,y,max);ctx.fillStyle=sub.color;ctx.fillText(line,W/2,y,max);});
+    ctx.restore();return;
+  }
   // box hugs the text — cutscene lines are hand-written and vary a lot in
   // length, so a fixed 620px box either overflows or looks empty
   const tw=ctx.measureText(sub.text).width;

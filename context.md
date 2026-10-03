@@ -8,8 +8,8 @@ Keep it scannable — facts, not prose. This file exists to avoid re-explaining 
 ## What this is
 `Khukuri` — 2D side-scrolling action-platformer, browser, vanilla JS + Canvas 2D.
 Nepali setting/story. Hari fights across a 5200px level to rescue Muna; the ending is a joke
-rejection cutscene. **All in-fiction text is romanized Nepali only** — no English, no Devanagari.
-No voiceover: story is told through on-screen subtitles.
+rejection cutscene. Subtitle language is chosen before the intro: English or romanized Nepali.
+No Devanagari or voiceover: story is told through on-screen subtitles.
 
 Story (intro, set by user — don't rewrite without asking): Maobadi raid the village while Hari
 is meditating and take Muna; he pulls his grandfather's khukuri from the daraj and goes after her.
@@ -100,7 +100,8 @@ src/
 - Boss: 3 phases @ 18 HP, 5 attacks (slash/throw/leap/spin/stomp), summons cadres in phase 3.
 - Pickups: momo (5 = +1 HP), khukuri drops (+1 ammo), heal orbs (+2 HP), lore paper.
 - 4 scenes: intro → play → cutscene → credits.
-- **Romanized Nepali only.** No Devanagari, no English story text, no voiceover.
+- Story captions/subtitles support English or romanized Nepali, selected before the intro.
+  No Devanagari or voiceover.
 - Subtitles auto-size duration to text length (`say()` in state.js) — floor 200 frames.
 - Full character animation: walk cycle w/ leg IK-ish bend, jump/fall poses, landing squash,
   parry guard stance, idle breathing + blink, tupi sway, body lean, robe flare. Enemies+boss too.
@@ -118,11 +119,12 @@ src/
 - Layered parallax background: sun w/ god rays, 2 cloud bands, 3 ridgelines w/ snowcaps,
   haze bands, birds, stupa, houses w/ chimney smoke, prayer flags, terraced hills, pines, dust motes.
 
-## Controls (current — 2026-09-07)
+## Controls (current — 2026-10-02)
 Move A/D · jump W/Space · dodge Shift · **Left-click = attack** (light combo string) ·
 **Right-click = parry** · **E = ult (iai-jutsu)** · F free Muna · R restart · M mute · 1/2 difficulty on intro.
-On-page control text is intentionally REMOVED from index.html. Mouse handling is in main.js
-`wireInput` (contextmenu prevented; button0=light, button2=parry).
+Title screen and opening gameplay show controls, then fade. Intro menu order: title → language →
+difficulty → Enter-paced cinematic → game. Mouse handling is in main.js `wireInput` (contextmenu
+prevented; button0=light, button2=parry).
 
 ## Weapons (2026-09-07, from user reference images)
 - **Khukuri** = Hari's normal blade (`khukuriBlade()` in render.js): forward-drooping heavy belly,
@@ -181,8 +183,8 @@ Sekiro-style, config consts STAGGER_FRAMES/POSTURE_* /DEATHBLOW_FRAMES.
   observes the same live values across ES module boundaries.
 - **Arrays in `entities.js` are mutated in place** (`resetEnemies()`/`resetMomos()`), never
   reassigned, so importers keep a valid reference after a restart.
-- **`say(text, frames, color)` — 3 args, single language.** Was `say(ne, en, frames, color)`;
-  the English line was removed and all 24 callsites refactored. `sub` is `{text,t,color}`.
+- **`say(text, frames, color)` — 3 args.** `src/i18n.js` translates mapped subtitles according to
+  `state.language`; `sub` is `{text,t,color}`.
   `frames` is a MINIMUM, not exact — auto-duration from text length wins if longer, which is
   why sticky `9999` prompts still work.
 - **`hitstop` early-returns from `updatePlay()`** to freeze the world, but shake/flash/sparks are
@@ -211,9 +213,8 @@ Sekiro-style, config consts STAGGER_FRAMES/POSTURE_* /DEATHBLOW_FRAMES.
 ## Known issues / do not touch
 - `khukuri.html` is the untouched original. Leave it — it's the rollback + behavior reference.
 - **Voiceover was removed on request. Do not re-add TTS.** `speechSynthesis` is gone everywhere.
-- **English story text was removed on request.** User chose "story text only" scope: functional
-  UI in English STAYS (HUD labels `khukuri:`/`ult:`/`Phase N`, `Press F — Munalai fukau`, the
-  keyboard hints in index.html, credit names, `Thank you for playing`).
+- English subtitles are available by menu selection; Nepali subtitles remain romanized.
+  Functional HUD labels remain English.
 - **Subtitles are for STORY ONLY.** Gameplay feedback (pickups, parries, kills, ult, heavy
   windup, cadre summon) goes to right-side toasts — the subtitle bar sits over the play area
   and reading it mid-fight costs you the fight. Don't move gameplay messages back to `say()`.
@@ -231,7 +232,7 @@ Sekiro-style, config consts STAGGER_FRAMES/POSTURE_* /DEATHBLOW_FRAMES.
   `reset()` calls `resumeBgm()` so pressing R mid-cutscene can't strand it in silence.
 - Cutscene dialogue is USER-WRITTEN. Don't rewrite. To add a line, append to `LINES[]` and
   check `LEAVE_FROM` / `RAJU_SPEAKS` indices still point at the right lines.
-- Cutscene camera is fixed at `cam = WORLD-W` (4380), so only x 4380–5200 is visible.
+- Cutscene camera stays on the ending area with a slight cinematic drift.
   Anything positioned right of 5200 during the cutscene is OFF SCREEN — this bit Raju, whose
   walk-in was tuned for the old timed pacing and left him off-camera when players mashed Enter.
   `RAJU_SPEED` + a hard snap at `RAJU_SPEAKS` guard it.
@@ -258,6 +259,28 @@ No test framework. Verify with headless Edge via `puppeteer-core` (no Chromium d
 - **Grep case-sensitively at your peril**: searching `narrate` misses `queueNarrate`. Use `-i`.
 
 ---
+
+## Last session (2026-10-01 — intro cinematic)
+1. Reworked `src/scenes/BootScene.js` as title menu → ten-shot story cinematic → difficulty
+   selection. Captions use the unchanged `introLines` wording, centered over the image with no
+   subtitle panel; shots run 180 fixed frames each with short dissolves and letterbox bars.
+2. Intro actors/backgrounds use the actual game renderers (`drawHari`, `drawMuna`, `drawEnemy`,
+   `drawHouse`, `drawBackground`, `drawGround`). Hari has a native-renderer meditation pose and
+   stays unarmed until the khukuri story beat. Casual and Warrior are clickable buttons; choosing
+   either starts the game. Enter opens the cinematic from the title menu; keys 1/2 choose difficulty.
+3. `git diff --check` passed. No browser verification run.
+
+## Last session (2026-10-02 — bilingual menus and cutscene sound)
+1. Menu order: title → subtitle language → difficulty → intro. Difficulty selection starts the
+   cinematic; its last Enter fades into play. Shots wait for Enter. Added title controls with a fade,
+   village houses, a distinct villager messenger, heartbeat pulse as Hari learns Muna was taken, and
+   an opening daraj revealing the khukuri. Hari meditates during the raid shot.
+2. Replaced cage bars with Muna tied to a post. Added a short fading gameplay control guide. Ending
+   cutscene has letterbox bars, slow camera drift, centered dialogue without the regular subtitle
+   panel/HUD, a quiet transition whoosh, and an arrival rustle.
+3. English and romanized Nepali subtitle options cover intro lines and mapped `say()` dialogue;
+   English describes Hari as having a ponytail (the Nepali `tupi` detail), not wearing a topi.
+   `git diff --check` passed. No browser verification run.
 
 ## Last session (2026-08-30, part 2 — animation overhaul)
 1. Rewrote character rendering: 2-bone IK limbs (`limb2`) for Hari + enemies, katana/khukuri
@@ -302,3 +325,102 @@ No test framework. Verify with headless Edge via `puppeteer-core` (no Chromium d
 4. **Phaser migration STILL NOT STARTED** — user never answered the fixed-timestep vs
    idiomatic-Phaser question. Ask before starting. Note the heavy canvas animation work done in
    render.js would need re-baking under the agreed `generateTexture()` sprite plan.
+
+## Last session (2026-10-02 — village platforming and cinematic setting)
+1. Added a distant city skyline for the English “city’s greed” story beat; moved the raid into a
+   house cutaway with Hari meditating inside and Muna’s kidnapping outside.
+2. Unified the sky and scene grade around the dark cinematic look. Made the mountain profiles
+   sharper, grounded distant houses at the valley floor, attached prayer flags to supports, and
+   moved a large stupa into the playable foreground.
+3. Reworked the level route with climbable village house roofs, stone terrace ledges, house/stupa
+   collision, and a lethal jumpable ground gap. Updated the collectible note to village-protection
+   lore and translated it; the English ending preserves “muji.”
+4. Removed the end cutscene’s horizontal camera sway for steady framing. `git diff --check` passed;
+   no browser verification run.
+5. Browser follow-up: confirmed the prior `GROUND_GAPS` export/import error is absent in the local
+   preview. Suppressed gameplay platform geometry in intro shots (it rendered as floating bars)
+   and strengthened the dark scene grade. Checked title, intro raid shot, and gameplay transition;
+   `git diff --check` passes.
+6. Follow-up on a persistent browser console error: the server serves the current `GROUND_GAPS`
+   export (HTTP 200), but an old cached module was being reused. Added `?v=20261002-2` to the
+   config imports and module entry URL. Confirmed the cache-busted URL renders the title screen.
+
+## Last session (2026-10-02 — Upper Mustang level and underground finale)
+1. Researched Upper Mustang/Lo Manthang references: arid high-altitude valleys, ochre wind-carved cliffs, mud-brick flat-roof homes, rooftop firewood, and walled settlements. Sources: Nepal Tourism Board Lo Manthang, Wikimedia Commons Lo Manthang photo, AP Samjung feature, and Nepali Times on Mustang rooftops.
+2. Replaced arbitrary floating rectangular platforms with playable mud-house roofs and stone terrace paths; added a surface stair-mouth and descending rock-cut dungeon with small alcoves. Moved the boss, its floor physics, and its healing pickups underground. Fixed the cutscene camera height to match the dungeon view.
+3. Added an abrupt BGM cut, short heartbeat/glassy shock sting, screen flash/pulse, and shake when Muna says she loves someone else. Replaced the paper text with a translated prophecy: “The mountain gods already know the one who will guard this village.”
+4. Added cave strata, torch glows, wall niches, and layered dark grading. Unified mutable module import URLs at `?v=20261002-3` to avoid stale exports and duplicated module state; index.html now uses the same cache version.
+5. `git diff --check` passed. No tests or browser run were performed in this session.
+
+## Follow-up (2026-10-02 — dungeon route, yak hazard, character pass)
+1. Researched Team Cherry's world-building framing and Jump King's risk/readability around deliberate jumps, plus Upper Mustang yak references. Links: ACMI Team Cherry interview, Jump King official page, and Wikimedia Commons yaks of Nepal.
+2. Extended the world to 8,500 units so the village route to the dungeon is about as long as the subterranean route to Muna. The boss room begins at x=7,380, after a long cave approach. Added a boss arrival taunt with a visible Enter prompt; Enter starts combat, and the minister now has localized combat barks and phase dialogue.
+3. Reduced terrace ledges from 13 to 6, village roof platforms from 13 to 7, stair platforms from 5 to 3, and removed the dungeon alcove ledges. The final chamber has no platforms. Added two cave-floor pits; player falls are lethal, and enemies can fall and be removed.
+4. Added a moving yak hazard on the village path. Its warning state telegraphs a short charge, with a quiet snort cue. Improved Hari, the minister, regular enemies, Muna, and Raju with added silhouette, clothing, face, and movement detail in the same dark painterly canvas style.
+5. Updated every local JS module and the entry URL to `?v=20261002-4`. `git diff --check` passed. No browser run or gameplay tests were performed.
+
+## Follow-up (2026-10-02 — character design revision)
+1. Used the supplied images as silhouette and clothing references while preserving the established dark, painterly canvas style.
+2. Gave Hari a clearer, larger profile nose and three white forehead stripes. Redesigned Muna's face and high ponytail while keeping her dress; refined Raju's face and side-parted hair and added separated light trousers.
+3. Simplified the minister into a dark suit, white shirt, restrained tie, and cream trousers. Removed the handheld blade, added unarmed attack gestures, and widened/separated his animated legs.
+4. Unified module cache URLs at `?v=20261002-5`. `git diff --check` passed; no browser or gameplay verification was run.
+## Follow-up (2026-10-02 — Hari hair and forehead marks)
+1. Repositioned Hari's tied ponytail and knot to the back crown so they sit behind the skull in profile.
+2. Cleared the front hairline and moved the three white forehead marks to the visible front plane, following the latest user reference.
+3. Updated all local module URLs and index.html to `?v=20261002-6` for a fresh browser load. `git diff --check` passed; no browser verification was run.
+## Follow-up (2026-10-02 — minister caricature and character separation)
+1. Reworked the minister toward the new reference: broad caricature face, dark glasses, large moustache, raised-fist idle pose, and blue jacket over an open-collar red shirt. Removed the tie.
+2. Increased the visual distinction between Muna and Raju: kept Muna's dress and added a longer back braid; gave Raju a Dhaka topi, different skin shading, and a moustache.
+3. Bumped the shared local module URL to `?v=20261002-7`. `git diff --check` passed; no browser preview or gameplay tests were run.
+## Follow-up (2026-10-02 — minister shirt and Hari cutscene face)
+1. Replaced the minister's red shirt panel with a white open-collar shirt; the outfit has no tie.
+2. Removed Hari's remaining scalp hair so only his back ponytail remains. Enlarged the eye and disabled blinking during cutscenes so it stays visible in the ending.
+3. Bumped shared module URLs to `?v=20261002-8`. `git diff --check` passed; no browser preview was run.
+## Follow-up (2026-10-02 — hide boss fight subtitles)
+1. Suppressed subtitle rendering while the minister is active and combat has started. The pre-fight dialogue/Enter prompt and post-fight victory subtitle remain visible.
+2. Updated all local module URLs to `?v=20261002-9`. `git diff --check` passed; no browser test was run.
+## Follow-up (2026-10-02 — thinner obstacle course and recoverable falls)
+1. Reduced terrace platforms from six to three, made only four of seven village houses solid/climbable while keeping all visible, and reduced dungeon pits from two to one. Kept the entry stairs and yak.
+2. Pit and surface-gap falls now cost 2 HP (clamped so they cannot kill Hari directly) and respawn him just before the jump with brief hurt protection.
+3. Unified local module URLs at `?v=20261002-10`. `git diff --check` passed; no browser or gameplay test was run.
+## Follow-up (2026-10-02 — Xbox controller support)
+1. Added browser Gamepad API polling with left-stick/D-pad movement and Xbox-standard buttons: A jump/confirm, X attack, B dodge, RB parry, Y iai, D-pad up free Muna, and Start advance dialogue/start the boss. Actions trigger once per press while movement stays held.
+2. Added controller navigation/focus to language and difficulty menus and listed controller mappings in the startup controls card. B selects the second menu option; D-pad/left-stick horizontal chooses the option, then A confirms. Updated app module URLs to `?v=20261002-11`.
+3. `git diff --check` passed. No connected-controller or browser gameplay verification was run.
+## Follow-up (2026-10-02 — PlayStation-style controller scheme and controls selector)
+1. Remapped standard gamepad buttons to PS labels on any controller brand: Cross jumps, Square confirms/interacts/frees Muna and advances dialogue, Circle dodges, Triangle uses iai, L1 blocks, and R1 attacks. Controller movement remains left stick/D-pad; Start also confirms and begins the boss fight.
+2. Added a Keyboard/Controller selector and a persistent controls card on the title screen. The chosen display mode updates intro, dialogue, boss prompts, and the fading in-game tutorial; controller glyphs remain PS-style even for Xbox pads. Bumped local module URLs to `?v=20261002-12`.
+3. `git diff --check` passed. No connected-controller or browser gameplay verification was run.
+## Follow-up (2026-10-02 — controller remap and button prompt badges)
+1. Final controller mapping: Cross = jump and contextual Action (menu confirm, dialogue advance, boss start, free Muna); Square = attack; Circle = dodge; Triangle = Ultimate; L1 = block. R1 has no gameplay binding. Keyboard Enter remains Action.
+2. Replaced plain key text with matching PS-button circles or keyboard keycaps in the title/menu hints, intro and ending advance prompts, boss-start prompt, Muna interaction prompt, and Ultimate HUD indicator. Controls card and tutorial now label Cross as Jump / Action and Square as Attack; removed duplicate Action mappings and obsolete F prompts.
+3. Bumped all local module references and index.html to `?v=20261002-17`. `git diff --check` passed; no browser or physical controller test was run.
+
+## Follow-up (2026-10-02 — persistent controls and aerial slash)
+1. Replaced the fading top-corner tutorial with a persistent, full-width controls strip at the bottom of gameplay. Kept story/menu prompts separate; moved gameplay subtitles above the strip and placed the Muna Action prompt just above it.
+2. Added focus-loss/hidden-tab input cleanup so stuck keyboard or gamepad states release when the page loses focus. Bumped all local module references and index.html to `?v=20261002-18`.
+3. Added AIR_DOWN: the regular attack input starts a downward aerial khukuri slash while airborne, with a dedicated pose, hitbox, and warm blade trail. The ground combo remains unchanged.
+4. `git diff --check` passed. No browser or controller runtime test was run.
+
+## Follow-up (2026-10-02 — below-screen controls and controller detection)
+1. Moved the always-visible control strip out of the Canvas into the page layout below the game. It switches between keyboard and PS-style controller labels and reports whether a gamepad is detected, including its reported name.
+2. Gamepad polling now chooses the connected pad that is actively receiving input instead of always taking the first connected device. It retains Cross = Jump / Action, Square = Attack, Circle = Dodge, L1 = Block, Triangle = Ultimate; focus-loss cleanup remains enabled.
+3. Kept the midair attack as a downward khukuri slash. Unified local module URLs and index.html at `?v=20261002-19`. `git diff --check` passed and the local server returns index.html with HTTP 200; no physical controller test was possible.
+
+## Follow-up (2026-10-02 — remove controller status text)
+1. Removed the connected/not-detected message from the below-canvas control strip. The strip now contains only button/key badges and their action labels, with PS-style colored face buttons in controller mode and keycaps in keyboard mode.
+2. Kept the page layout and active-gamepad polling. Bumped all local module references and index.html to `?v=20261002-20`. `git diff --check` passed; local index.html responds HTTP 200.
+
+## Follow-up (2026-10-02 — intro-matched controls below game)
+1. Rebuilt the below-game controls as the intro-style dark card with gold heading, key/button badges, and paired rows. The heading and labels update for keyboard/controller mode and English/Nepali.
+2. Kept the footer action label simply Attack (or prahar); it does not mention the aerial/downward slash.
+3. Kept the controls beneath the canvas and refreshed local module URLs to `?v=20261002-21`. `git diff --check` passed; no browser or gameplay test was run.
+
+## Follow-up (2026-10-02 — match the intro controls panel)
+1. Resized and restyled the footer card to match the intro panel: centered gold title, dark fill, gold border, two-column paired rows, and matching key/button badges.
+2. Added a stylesheet cache-buster (`?v=20261002-22`) so the corrected layout replaces the stale footer styling shown in the screenshot.
+3. `git diff --check` passed; no browser or gameplay test was run.
+
+## Follow-up (2026-10-02 — sharper mountain silhouettes)
+1. Replaced the soft, noisy ridge profiles with spaced angular peaks across the far, middle, and near parallax layers. Added restrained light/shadow facets and larger jagged snowcaps to make the distant range read more clearly as mountains while retaining the dark palette.
+2. Refreshed local module and stylesheet URLs to `?v=20261002-23`. `git diff --check` passed; no gameplay test was run.

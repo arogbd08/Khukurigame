@@ -1,20 +1,20 @@
-import {ctx} from '../canvas.js';
-import {W, H, GROUND, WORLD,
+import {ctx} from '../canvas.js?v=20261002-23';
+import {W, H, GROUND, WORLD, GROUND_GAPS, DUNGEON_PITS, DUNGEON_ENTRY_X, DUNGEON_ENTRY_END, DUNGEON_FLOOR, DUNGEON_BOSS_ROOM_START, DUNGEON_BOSS_TRIGGER,
         PARRY_DURATION, PARRY_ACTIVE, PARRY_COOLDOWN, PARRY_HITSTOP, PARRY_SHAKE,
         ULT_COST, ULT_MAX_CHARGES, ULT_DMG_NORMAL, ULT_DMG_HEAVY, ULT_DMG_BOSS,
         MOVES, COMBO_GAP,
-        STAGGER_FRAMES, POSTURE_REGEN, POSTURE_HIT, POSTURE_BLOCK, POSTURE_PARRY, DEATHBLOW_FRAMES} from '../config.js';
-import {state, sub, say, toast, keys, input, clearQueued, diff,
-        shakeScreen, flashScreen, burst, updateSparks, updateToasts, toasts} from '../state.js';
-import {sfx, resumeBgm} from '../audio.js';
-import {over} from '../utils.js';
-import {player, plats, momos, paper, enemies, boss, cage, cadre,
+        STAGGER_FRAMES, POSTURE_REGEN, POSTURE_HIT, POSTURE_BLOCK, POSTURE_PARRY, DEATHBLOW_FRAMES} from '../config.js?v=20261002-23';
+import {state, sub, say, toast, keys, pad, input, clearQueued, diff,
+        shakeScreen, flashScreen, burst, updateSparks, updateToasts, toasts} from '../state.js?v=20261002-23';
+import {sfx, resumeBgm} from '../audio.js?v=20261002-23';
+import {over} from '../utils.js?v=20261002-23';
+import {player, plats, structures, momos, paper, enemies, boss, cage, cadre, cs, yak,
         shots, pthrows, ethrows, drops, shocks, healDrops,
-        resetEnemies, resetMomos} from '../entities.js';
+        resetEnemies, resetMomos} from '../entities.js?v=20261002-23';
 import {drawSky, drawBackground, drawGround, drawMomo, drawBlade, drawHealOrb,
-        drawPaper, drawCage, drawEnemy, drawBoss, drawHari, drawCutsceneActors,
-        drawSparks} from '../render.js';
-import {enterCutscene} from './CutsceneScene.js';
+        drawPaper, drawCage, drawEnemy, drawBoss, drawHari, drawCutsceneActors, drawForegroundVillage, drawSceneGrade, drawDungeonBackdrop, drawDungeonArchitecture,
+        drawSparks, drawYak, drawControlBadge} from '../render.js?v=20261002-23';
+import {enterCutscene} from './CutsceneScene.js?v=20261002-23';
 
 /* ================= HELPERS ================= */
 function invuln(){return player.hurt>0||player.dodge>4||player.ult>4;}   // ult (=iai) dashes with i-frames
@@ -37,6 +37,8 @@ function hurtPlayer(dir,dmg){
 function spawnHealDrop(x,y){
   healDrops.push({x,y,got:false,bob:Math.random()*6.28});
 }
+
+function bossFloor(){return DUNGEON_FLOOR;}
 
 /* Deflect: a small, sharp ORANGE spark burst at the clash point (no big arc),
    plus freeze + shake for weight. Reads as a crisp "ting", not a shield. */
@@ -61,7 +63,8 @@ function killEnemy(en){
   en.alive=false; player.coins+=en.type==='heavy'?4:2; sfx('hit');
   shakeScreen(4);
   burst(en.x+en.w/2, en.y+en.h/2, 16, {col:'#d8c8a0', speed:4.5, life:26});
-  for(let i=0;i<(en.type==='heavy'?5:3);i++) momos.push({x:en.x+i*9,y:GROUND-30,got:false});
+  const floorY=en.floorY||GROUND;
+  for(let i=0;i<(en.type==='heavy'?5:3);i++) momos.push({x:en.x+i*9,y:floorY-30,got:false});
   if(Math.random()<0.4) toast('Ek bhrasta kam bhayo.','#cfe0a0');
 }
 
@@ -86,14 +89,15 @@ function updateCombo(){
   if(player.move){
     const mv=player.mv;
     player.atkT++;
-    if(L) player.buffer='L';   // buffer the follow-up
+    if(L&&!player.onGround&&!mv.airDown&&canAct){startMove('AIR_DOWN');return;}
+    if(L&&player.onGround) player.buffer='L';   // buffer the ground-string follow-up
     if(player.atkT>=mv.cancel && player.buffer && mv.next && mv.next[player.buffer] && canAct){
       startMove(mv.next[player.buffer]); return;
     }
     if(player.atkT>=mv.dur){ player.move=null; player.mv=null; player.buffer=null; }
     return;
   }
-  if(canAct && L) startMove('L1');   // open the string
+  if(canAct && L) startMove(player.onGround?'L1':'AIR_DOWN');
 }
 function cancelCombo(){ player.move=null; player.mv=null; player.buffer=null; }
 
@@ -134,13 +138,15 @@ export function reset(){
     move:null,mv:null,atkT:0,atkId:0,deathblow:0,dbTarget:null,buffer:null,comboCount:0,comboTimer:0,
     walkPhase:0,breathe:0,squash:0,parryFlash:0,throwAnim:0,turnLean:0,atkLean:0});
   resetEnemies(); resetMomos(); paper.got=false;
-  Object.assign(boss,{x:4760,hp:18,maxHp:18,dir:-1,state:'wait',timer:60,hitT:0,
-    alive:true,active:false,phase:1,vx:0,vy:0,summoned:0,spinT:0,rageT:0,enrageFlash:0,stomp:0,anim:0,lastAtkId:-1,
+  Object.assign(boss,{x:7800,y:DUNGEON_FLOOR-112,w:72,h:112,hp:18,maxHp:18,dir:-1,state:'wait',timer:60,hitT:0,
+    alive:true,active:false,started:false,phase:1,vx:0,vy:0,summoned:0,barkTimer:0,spinT:0,rageT:0,enrageFlash:0,stomp:0,anim:0,lastAtkId:-1,
     posture:0,maxPosture:12,stagger:0,blockFlash:0});
+  Object.assign(yak,{x:1180,y:GROUND-48,w:66,h:48,dir:-1,min:1125,max:1260,speed:0.7,state:'graze',charge:0,cooldown:0,anim:0,hitCooldown:0});
   shots.length=pthrows.length=ethrows.length=drops.length=shocks.length=healDrops.length=0;
+  healDrops.push({x:4700,y:DUNGEON_FLOOR-96,got:false,bob:0});
   toasts.length=0;
-  state.won=false; state.lost=false; state.hitstop=0; state.t=0; state.scene='play';
-  state.introLine=-1; state.shake=0; state.flash=0;
+  state.won=false; state.lost=false; state.hitstop=0; state.t=0; state.scene='play';state.cam=0;state.camY=0;
+  state.introLine=-1; state.shake=0; state.flash=0; state.tutorialT=0;
   resumeBgm();   // in case R was pressed during the (silent) cutscene
   say('Hari hindyo — Munako khojima.',0,'#e0d090');
 }
@@ -164,6 +170,15 @@ export function updatePlay(){
     }
   }
   if(state.lost){ clearQueued(); return; }
+  if(boss.active&&!boss.started){
+    player.vx=0;
+    if(input.actionQ){
+      boss.started=true;boss.timer=78;boss.barkTimer=360;sub.t=0;
+      say('Mantri: "Aaja, gaunko rakshak. Aau timro bhagya heraun!"',210,'#ffcf9b');
+      sfx('boss_roar');shakeScreen(8);flashScreen(4);
+    }
+    clearQueued();return;
+  }
   if(state.hitstop>0){ state.hitstop--; clearQueued(); return; }
   state.t++;
   const t=state.t;
@@ -178,28 +193,28 @@ export function updatePlay(){
   if(player.squash>0)player.squash=Math.max(0,player.squash-0.09);
   player.breathe+=0.06;
 
-  // ULT = IAI-JUTSU (E): one-charge katana draw, dashes forward, down→up cut.
+  // Ultimate (E / Triangle): one-charge katana draw, dashes forward, down→up cut.
   if(input.ultQ && player.ult<=0 && player.charges>=ULT_COST){
     player.ult=24; player.charges-=ULT_COST; cancelCombo();
     sfx('spin_attack'); sfx('ult');
     shakeScreen(7); flashScreen(6);
     burst(player.x+player.w/2, player.y+28, 20,
       {col:'#ffe6a0', speed:6, life:26, angle:player.facing>0?0:Math.PI, spread:1.8});
-    toast('Iai-jutsu!','#ffe6a0');
+    toast('Ultimate!','#ffe6a0');
   }
   input.ultQ=false;
 
   if(input.dodgeQ && player.dodge===0 && player.dodgeCd===0 && player.ult<=0){
     player.dodge=16; player.dodgeCd=42; cancelCombo();   // dodge cancels the current attack (flow)
-    player.dodgeDir=keys['KeyA']?-1:keys['KeyD']?1:player.facing;
+    player.dodgeDir=(keys['KeyA']||pad.left)?-1:(keys['KeyD']||pad.right)?1:player.facing;
     player.facing=player.dodgeDir;
   }
   input.dodgeQ=false;
 
   if(player.ult>0){ player.vx=player.facing*(player.ult>8?12:4); player.ult--; }
   else if(player.dodge>0){ player.vx=player.dodgeDir*6.8; player.dodge--; }
-  else { if(keys['KeyA']){player.vx=-sp;player.facing=-1;}
-    else if(keys['KeyD']){player.vx=sp;player.facing=1;} else player.vx=0; }
+  else { if(keys['KeyA']||pad.left){player.vx=-sp;player.facing=-1;}
+    else if(keys['KeyD']||pad.right){player.vx=sp;player.facing=1;} else player.vx=0; }
 
   if(input.jumpQ && player.jumps>0){
     player.vy=-10.6;player.jumps--;player.onGround=false;sfx('jump');
@@ -210,11 +225,22 @@ export function updatePlay(){
   input.jumpQ=false;
 
   player.wasOnGround=player.onGround;
-  player.vy+=0.55; const ob=player.y+player.h;
+  player.vy+=0.55; const ob=player.y+player.h, oldX=player.x;
   player.x+=player.vx; player.y+=player.vy;
   player.x=Math.max(0,Math.min(WORLD-player.w,player.x));
+  for(const s of structures){
+    const overlap=player.x+player.w>s.x&&player.x<s.x+s.w;
+    if(overlap&&player.y+player.h>s.top+5&&player.y<(s.bottom??GROUND)){
+      if(oldX+player.w<=s.x){player.x=s.x-player.w;player.vx=0;}
+      else if(oldX>=s.x+s.w){player.x=s.x+s.w;player.vx=0;}
+    }
+  }
   player.onGround=false;
-  if(player.y+player.h>=GROUND){player.y=GROUND-player.h;player.vy=0;player.onGround=true;}
+  const center=player.x+player.w/2, overGap=GROUND_GAPS.some(([a,b])=>center>a&&center<b);
+  const dungeonSide=center>=DUNGEON_ENTRY_X;
+  if(center<DUNGEON_ENTRY_X&&player.y+player.h>=GROUND&&!overGap){player.y=GROUND-player.h;player.vy=0;player.onGround=true;}
+  const dungeonPit=DUNGEON_PITS.some(([a,b])=>center>a&&center<b);
+  if(dungeonSide&&!dungeonPit&&player.y+player.h>=DUNGEON_FLOOR){player.y=DUNGEON_FLOOR-player.h;player.vy=0;player.onGround=true;}
   for(const pl of plats){ const nb=player.y+player.h;
     if(player.vy>=0&&ob<=pl.y&&nb>=pl.y&&player.x+player.w>pl.x&&player.x<pl.x+pl.w){
       player.y=pl.y-player.h;player.vy=0;player.onGround=true;} }
@@ -228,6 +254,49 @@ export function updatePlay(){
   }
   player.vy0=player.vy;
   if(player.onGround)player.jumps=2;
+  const fellIntoDungeonPit=dungeonSide&&dungeonPit&&player.y>DUNGEON_FLOOR+100;
+  const fellIntoSurfaceGap=!dungeonSide&&player.y>H+28;
+  if(fellIntoDungeonPit||fellIntoSurfaceGap){
+    const gap= fellIntoDungeonPit
+      ? DUNGEON_PITS.find(([a,b])=>center>a&&center<b)
+      : GROUND_GAPS.find(([a,b])=>center>a&&center<b);
+    const edge=gap?.[0]??(fellIntoDungeonPit?5360:1790);
+    const floorY=fellIntoDungeonPit?DUNGEON_FLOOR:GROUND;
+    // Falling costs health, but always leaves Hari alive and returns him to the
+    // near side of the gap so he can try the jump again.
+    player.hp=Math.max(1,player.hp-2);
+    player.x=Math.max(0,edge-player.w-22);player.y=floorY-player.h;
+    player.vx=0;player.vy=0;player.vy0=0;player.onGround=true;player.wasOnGround=false;player.jumps=2;
+    player.hurt=70;player.parry=0;player.dodge=0;player.ult=0;cancelCombo();
+    player.facing=1;state.camY=fellIntoDungeonPit?Math.max(0,DUNGEON_FLOOR-H*.78):0;
+    state.hitstop=6;shakeScreen(8);sfx('hurt');clearQueued();
+    burst(player.x+player.w/2,player.y+player.h,12,{col:'#c8bb98',speed:3.2,life:20,angle:-Math.PI/2,spread:2.6,grav:.16});
+    toast(state.language==='en'?'Fell in the pit!  -2 HP':'Khaddama khasyo!  -2 HP','#e3c493');
+    return;
+  }
+  const targetCamY=dungeonSide&&player.y>GROUND+12?Math.max(0,Math.min(DUNGEON_FLOOR-H*.78,player.y+player.h-H*.78)):0;
+  state.camY+=(targetCamY-state.camY)*0.16;
+  if(Math.abs(targetCamY-state.camY)<0.5)state.camY=targetCamY;
+
+  // A yak herd animal blocks the narrow village path. Its lowered head and
+  // hoof scrape telegraph a short, bounded charge before it recovers.
+  yak.anim+=yak.state==='charge'?0.22:0.06;
+  if(yak.cooldown>0)yak.cooldown--;
+  if(yak.hitCooldown>0)yak.hitCooldown--;
+  if(yak.state==='graze'){
+    yak.x+=yak.dir*yak.speed;
+    if(yak.x<yak.min||yak.x>yak.max){yak.dir*=-1;yak.x=Math.max(yak.min,Math.min(yak.max,yak.x));}
+    if(yak.cooldown===0&&Math.abs(player.x-yak.x)<155){yak.dir=player.x<yak.x?-1:1;yak.state='warn';yak.charge=36;sfx('yak_snort');}
+  }else if(yak.state==='warn'){
+    if(--yak.charge<=0){yak.state='charge';yak.charge=40;shakeScreen(2);}
+  }else if(yak.state==='charge'){
+    yak.x+=yak.dir*4.4;
+    if(--yak.charge<=0||yak.x<yak.min-50||yak.x>yak.max+50){yak.state='recover';yak.charge=45;yak.cooldown=150;}
+  }else if(--yak.charge<=0)yak.state='graze';
+  if(over(player,yak)&&yak.hitCooldown===0){
+    hurtPlayer(yak.dir,1);player.vx=yak.dir*8;yak.hitCooldown=60;
+    if(yak.state==='charge'){yak.state='recover';yak.charge=45;yak.cooldown=150;}
+  }
 
   /* ---- animation drivers ---- */
   if(player.onGround && Math.abs(player.vx)>0.4) player.walkPhase += Math.abs(player.vx)*0.17;
@@ -256,7 +325,7 @@ export function updatePlay(){
   // difficulty widens/narrows the active deflect window (Casual is more forgiving)
   const parrying=player.parry>diff().parryThresh;
 
-  /* ---- combo attacks (Left mouse) ---- */
+  /* ---- combo attacks: ground string or downward aerial slash ---- */
   updateCombo();
   // build the live hitbox + its stats from the current move's active window
   let hb=null, hbDmg=1, hbKb=6, hbStop=3, hbHeavy=false;
@@ -264,7 +333,10 @@ export function updatePlay(){
     const mv=player.mv;
     if(player.atkT>=mv.a0 && player.atkT<=mv.a1){
       const r=mv.reach;
-      hb={x: player.facing===1 ? player.x+player.w-6 : player.x+player.w-6-r, y:player.y-6, w:r, h:62};
+      if(mv.airDown){
+        const x=player.x+player.w/2-r/2;
+        hb={x:x+(player.facing===1?8:-8),y:player.y+player.h-12,w:r,h:48};
+      }else hb={x: player.facing===1 ? player.x+player.w-6 : player.x+player.w-6-r, y:player.y-6, w:r, h:62};
       hbDmg=mv.dmg; hbKb=mv.kb; hbStop=mv.hitstop; hbHeavy=!!mv.finisher;
     }
   }
@@ -280,7 +352,7 @@ export function updatePlay(){
   } }
   if(!paper.got && Math.abs(player.x+player.w/2-paper.x)<26 && Math.abs(player.y+24-paper.y)<46){
     paper.got=true; sfx('paper');
-    say('Kagajma eutai shabda lekheko cha:  "rabindra winner"',260,'#f0e0a0');
+    say('Gaunko rakshaklai pahadka devataharule pahilai chinisakeka chhan.',360,'#f0e0a0');
   }
   for(const d of drops){ if(!d.got && Math.abs(player.x+player.w/2-d.x)<24 && Math.abs(player.y+30-d.y)<46){
     d.got=true; player.ammo=Math.min(player.maxAmmo,player.ammo+1); sfx('pickup');
@@ -299,6 +371,7 @@ export function updatePlay(){
     if(e.dodgeCd>0)e.dodgeCd--;
     if(e.blockFlash>0)e.blockFlash--;
     const dx=player.x-e.x, dist=Math.abs(dx), near=dist<200 && Math.abs(player.y-e.y)<80;
+    const floorY=e.floorY||GROUND;
 
     // posture: bleeds off when not pressured; a broken enemy is frozen & open
     if(e.stagger>0){ e.stagger--; }
@@ -345,15 +418,22 @@ export function updatePlay(){
     } else if(e.state==='slam'){
       // heavy ground slam — big hitbox
       e.x+=e.vx; if(--e.timer<=0){
-        sfx('stomp'); shocks.push({x:e.x,y:GROUND-14,vx:-7,life:28,big:true});
-        shocks.push({x:e.x,y:GROUND-14,vx:7,life:28,big:true});
+        sfx('stomp'); shocks.push({x:e.x,y:floorY-14,vx:-7,life:28,big:true});
+        shocks.push({x:e.x,y:floorY-14,vx:7,life:28,big:true});
         e.state='recover'; e.timer=55;
       }
     } else if(e.state==='leap'){
       e.vy+=0.5; e.x+=e.vx; e.y+=e.vy;
-      if(e.y>=GROUND-e.h){e.y=GROUND-e.h;e.vy=0;e.state='recover';e.timer=34;}
+      if(e.y>=floorY-e.h&&!DUNGEON_PITS.some(([a,b])=>e.x+e.w/2>a&&e.x+e.w/2<b)){
+        e.y=floorY-e.h;e.vy=0;e.state='recover';e.timer=34;
+      }
     } else { if(--e.timer<=0)e.state='patrol'; }
     e.x=Math.max(40,Math.min(WORLD-40,e.x));
+    const enemyInPit=DUNGEON_PITS.some(([a,b])=>e.x+e.w/2>a&&e.x+e.w/2<b);
+    if(enemyInPit){
+      if(e.state!=='leap'){e.vy=(e.vy||0)+0.48;e.y+=e.vy;}
+      if(e.y>floorY+100){e.alive=false;burst(e.x+e.w/2,floorY+26,8,{col:'#8b7864',speed:2.2,life:18});continue;}
+    }else if(e.state!=='leap'){e.y=floorY-e.h;e.vy=0;}
 
     // combo swings gate per-swing (each connects once); ult gates on time
     const eGate = player.ult>4 ? e.hitT===0 : e.lastAtkId!==player.atkId;
@@ -405,8 +485,12 @@ export function updatePlay(){
   }
 
   /* ====== BOSS — 3 PHASES, 18 HP ====== */
-  if(player.x>4500) boss.active=true;
-  if(boss.alive && boss.active){
+  if(player.x>DUNGEON_BOSS_TRIGGER&&boss.alive&&!boss.active){
+    boss.active=true;boss.started=false;boss.x=Math.max(boss.x,DUNGEON_BOSS_ROOM_START+160);
+    say('Mantri: "Yo gaun ra pahad aba saharko sampatti ho."',9999,'#ffcf9b');
+    shakeScreen(5);sfx('boss_roar');
+  }
+  if(boss.alive && boss.active && boss.started){
     if(boss.hitT>0)boss.hitT--;
     if(boss.enrageFlash>0)boss.enrageFlash--;
     if(boss.blockFlash>0)boss.blockFlash--;
@@ -417,12 +501,12 @@ export function updatePlay(){
     if(boss.phase===1 && hpPct<0.66){
       boss.phase=2; boss.enrageFlash=40; sfx('boss_roar'); shakeScreen(10);
       say('Mantri: "Bajet khaeko manchhelai marchhas?!"',0,'#ff9a6a');
-      spawnHealDrop(boss.x-80, GROUND-26); // reward for reaching phase 2
+      spawnHealDrop(boss.x-80, bossFloor()-26); // reward for reaching phase 2
     }
     if(boss.phase===2 && hpPct<0.33){
       boss.phase=3; boss.enrageFlash=60; sfx('boss_roar'); shakeScreen(13);
       say('Mantri: "Ta marchhas! Ma sadhain banchhu!!!"',0,'#ff5050');
-      spawnHealDrop(boss.x+80, GROUND-26);
+      spawnHealDrop(boss.x+80, bossFloor()-26);
     }
 
     const dx=player.x-boss.x; boss.dir=dx>0?1:-1;
@@ -451,6 +535,10 @@ export function updatePlay(){
           else boss.state='throw_tel';
         }
         boss.timer=42; sfx('boss');
+        if(boss.barkTimer<=0){
+          const line=boss.phase===3?'Mantri: "Aba yo pahad nai mero ayudh ho!"':boss.phase===2?'Mantri: "Timro gaunle malai rokna sakdaina!"':'Mantri: "Farkera jaau. Yo timro yuddha hoina!"';
+          say(line,0,boss.phase===3?'#ff8b70':'#ffcf9b');boss.barkTimer=420;
+        }
       }
     }
 
@@ -493,13 +581,13 @@ export function updatePlay(){
         }
         else if(!invuln()&&!parrying) hurtPlayer(boss.dir,1);
       }
-      if(boss.y>=GROUND-boss.h){
-        boss.y=GROUND-boss.h; sfx('stomp'); shakeScreen(9);
-        burst(boss.x+boss.w/2, GROUND, 18, {col:'#c8b088', speed:5, life:24, angle:0, spread:6.283});
+      if(boss.y>=bossFloor()-boss.h){
+        boss.y=bossFloor()-boss.h; sfx('stomp'); shakeScreen(9);
+        burst(boss.x+boss.w/2, bossFloor(), 18, {col:'#c8b088', speed:5, life:24, angle:0, spread:6.283});
         const range=boss.phase===3?3:boss.phase===2?2:1;
         for(let i=0;i<range;i++){
-          shocks.push({x:boss.x,y:GROUND-14,vx:-(6+i*2),life:38+i*8});
-          shocks.push({x:boss.x,y:GROUND-14,vx:6+i*2,life:38+i*8});
+          shocks.push({x:boss.x,y:bossFloor()-14,vx:-(6+i*2),life:38+i*8});
+          shocks.push({x:boss.x,y:bossFloor()-14,vx:6+i*2,life:38+i*8});
         }
         boss.state='wait'; boss.timer=80;
       }
@@ -532,19 +620,20 @@ export function updatePlay(){
     } }
     else if(boss.state==='stomp'){
       boss.vy+=0.7; boss.y+=boss.vy;
-      if(boss.y>=GROUND-boss.h){
-        boss.y=GROUND-boss.h; sfx('shockwave');
+      if(boss.y>=bossFloor()-boss.h){
+        boss.y=bossFloor()-boss.h; sfx('shockwave');
         const n=boss.phase===3?5:boss.phase===2?3:2;
         for(let i=1;i<=n;i++){
-          shocks.push({x:boss.x,y:GROUND-14,vx:-(4+i*2),life:50+i*5});
-          shocks.push({x:boss.x,y:GROUND-14,vx:4+i*2,life:50+i*5});
+          shocks.push({x:boss.x,y:bossFloor()-14,vx:-(4+i*2),life:50+i*5});
+          shocks.push({x:boss.x,y:bossFloor()-14,vx:4+i*2,life:50+i*5});
         }
         boss.state='wait'; boss.timer=85;
       }
     }
     }  // end boss.stagger<=0 gate
 
-    boss.x=Math.max(4520,Math.min(WORLD-80,boss.x));
+    if(boss.barkTimer>0)boss.barkTimer--;
+    boss.x=Math.max(DUNGEON_BOSS_ROOM_START+60,Math.min(WORLD-100,boss.x));
 
     const bGate = player.ult>4 ? boss.hitT===0 : boss.lastAtkId!==player.atkId;
     if(hb && bGate && over(hb,boss)){
@@ -563,10 +652,10 @@ export function updatePlay(){
         boss.alive=false; state.won=true; sfx('boss_roar');
         shakeScreen(16); flashScreen(14);
         burst(boss.x+boss.w/2, boss.y+40, 40, {col:'#ffd24a', speed:7, life:44});
-        for(let i=0;i<8;i++) momos.push({x:boss.x-30+i*10,y:GROUND-30,got:false});
+        for(let i=0;i<8;i++) momos.push({x:boss.x-30+i*10,y:bossFloor()-30,got:false});
         player.hp=Math.min(player.maxHp,player.hp+3); player.ammo=player.maxAmmo;
-        spawnHealDrop(boss.x, GROUND-26);
-        say('Mantri parasta! Munalai fukau. (F)',9999,'#9fe06a');
+        spawnHealDrop(boss.x, bossFloor()-26);
+        say('Mantri parasta! Munalai fukau.',9999,'#9fe06a');
       }
     }
     if(!boss.alive) {} else {
@@ -575,12 +664,12 @@ export function updatePlay(){
           boss.alive=false; state.won=true; sfx('boss_roar');
           shakeScreen(16); flashScreen(14);
           player.hp=Math.min(player.maxHp,player.hp+3);
-          say('Mantri parasta! (F)',9999,'#9fe06a');
+          say('Mantri parasta!',9999,'#9fe06a');
         } } }
     }
     // phase 3 — boss summons helper
     if(boss.phase===3 && boss.alive && t%480===0 && enemies.filter(e=>e.alive).length<2){
-      const c=cadre(boss.x-120,'cadre'); c.min=c.x-60;c.max=c.x+90; enemies.push(c);
+      const c=cadre(boss.x-120,'cadre',DUNGEON_FLOOR); c.min=c.x-60;c.max=c.x+90; enemies.push(c);
       toast('Mantri: "Karyakarta ho, aau!"','#ff9a6a');
     }
   }
@@ -591,7 +680,7 @@ export function updatePlay(){
     const sz=s.big?20:16;
     if(!s.dead && Math.abs(player.x+player.w/2-s.x)<sz && player.onGround){
       if(parrying){
-        parrySuccess(s.x, GROUND-16);
+        parrySuccess(s.x, s.y);
         s.dead=true;
       }
       else if(!invuln()) hurtPlayer(s.vx>0?1:-1,1);
@@ -605,34 +694,36 @@ export function updatePlay(){
       // deflected shots become YOUR projectile, fired back faster
       if(parrying){ parrySuccess(s.x,s.y); pthrows.push({x:s.x,y:s.y,vx:-s.vx*1.3,spin:0,life:70}); s.dead=true; }
       else if(!invuln()){ hurtPlayer(s.vx>0?1:-1,1); s.dead=true; } } }
-  for(let i=shots.length-1;i>=0;i--){const s=shots[i]; if(s.dead||s.y>GROUND||s.x<0||s.x>WORLD)shots.splice(i,1);}
+  for(let i=shots.length-1;i>=0;i--){const s=shots[i]; if(s.dead||s.y>DUNGEON_FLOOR+H||s.x<0||s.x>WORLD)shots.splice(i,1);}
 
   for(const k of pthrows){ k.x+=k.vx; k.spin+=0.5; k.life--;
     if(boss.alive&&boss.active&&!k.dead&&boss.hitT===0&&over({x:k.x-6,y:k.y-6,w:12,h:12},boss)){
       boss.hp--; boss.hitT=16; k.dead=true; state.hitstop=4; sfx('hit');
       if(boss.hp<=0){boss.alive=false;state.won=true;sfx('boss_roar');
         shakeScreen(16); flashScreen(14);
-        say('Mantri parasta! (F)',9999,'#9fe06a');} } }
+        say('Mantri parasta!',9999,'#9fe06a');} } }
   for(let i=pthrows.length-1;i>=0;i--){const k=pthrows[i]; if(k.dead||k.life<=0||k.x<0||k.x>WORLD)pthrows.splice(i,1);}
 
   for(const s of ethrows){ s.x+=s.vx; s.vy+=0.16; s.y+=s.vy; s.spin+=0.4;
     if(over({x:s.x-6,y:s.y-6,w:12,h:12},player)){
       if(parrying){ parrySuccess(s.x,s.y); pthrows.push({x:s.x,y:s.y,vx:-s.vx*1.3,spin:0,life:70}); s.dead=true; }
       else if(!invuln()){ hurtPlayer(s.vx>0?1:-1,1); s.dead=true; } } }
-  for(let i=ethrows.length-1;i>=0;i--){const s=ethrows[i]; if(s.dead||s.y>GROUND||s.x<0||s.x>WORLD)ethrows.splice(i,1);}
+  for(let i=ethrows.length-1;i>=0;i--){const s=ethrows[i]; if(s.dead||s.y>DUNGEON_FLOOR+H||s.x<0||s.x>WORLD)ethrows.splice(i,1);}
 
   /* ---- free Muna -> cutscene ---- */
-  if(state.won && !boss.alive && input.freeQ && Math.abs(player.x-cage.x)<90){
+  if(state.won && !boss.alive && input.actionQ && Math.abs(player.x-cage.x)<90){
     enterCutscene();
   }
-  input.freeQ=false;
+  input.actionQ=false;
 }
 
 /* ================= RENDER ================= */
 export function drawWorld(){
   const t=state.t;
-  state.cam = state.scene==='cutscene' ? WORLD-W
+  state.cam = state.scene==='cutscene' ? WORLD-W-12
     : Math.max(0,Math.min(WORLD-W,player.x+player.w/2-W/2));
+  if(state.scene==='cutscene')state.camY=DUNGEON_FLOOR-H*.78;
+  const underground=state.camY>34;
 
   // screen shake — offsets the whole world layer, HUD stays anchored
   const sh=state.shake;
@@ -641,8 +732,12 @@ export function drawWorld(){
   ctx.save(); ctx.translate(shx,shy);
 
   drawSky(); drawBackground();
-  ctx.save(); ctx.translate(-state.cam,0);
-  drawGround();
+  if(underground)drawDungeonBackdrop(Math.min(1,state.camY/90));
+  ctx.save(); ctx.translate(-state.cam,-state.camY);
+  if(underground){drawDungeonArchitecture(true);drawGround({platforms:false,gaps:false,surface:false});}
+  else {drawGround();drawDungeonArchitecture(false);}
+  if(!underground)drawForegroundVillage();
+  if(!underground)drawYak(yak);
   for(const m of momos) if(!m.got) drawMomo(m.x,m.y+Math.sin(t/12+m.x)*3,1.1);
   for(const d of drops) if(!d.got) drawBlade(d.x,d.y+Math.sin(t/9+d.x)*2,t/8,'#d9d2c4');
   for(const h of healDrops) if(!h.got) drawHealOrb(h.x,h.y+Math.sin(t/10+h.bob)*3);
@@ -664,9 +759,41 @@ export function drawWorld(){
   ctx.restore();   // camera
   ctx.restore();   // shake
 
+  if(state.scene==='cutscene'&&cs.shock>0){
+    const age=78-cs.shock,cx=player.x+player.w/2-state.cam,cy=player.y+22-state.camY;
+    if(age<5){ctx.fillStyle=`rgba(244,235,218,${0.26*(1-age/5)})`;ctx.fillRect(0,0,W,H);}
+    const radius=10+Math.min(age,48)*4;
+    ctx.strokeStyle=`rgba(224,204,168,${Math.max(0,.42-age/190)})`;ctx.lineWidth=2.2;
+    ctx.beginPath();ctx.arc(cx,cy,radius,0,Math.PI*2);ctx.stroke();
+    ctx.strokeStyle=`rgba(210,115,87,${Math.max(0,.24-age/300)})`;ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.arc(cx,cy,radius*.62,0,Math.PI*2);ctx.stroke();
+    const pulse=.5+.5*Math.sin(age*.62);
+    const vignette=ctx.createRadialGradient(cx,cy,60,cx,cy,Math.max(W,H)*.72);
+    vignette.addColorStop(0,'rgba(20,12,15,0)');vignette.addColorStop(1,`rgba(48,16,19,${.18*pulse*(1-age/78)})`);
+    ctx.fillStyle=vignette;ctx.fillRect(0,0,W,H);
+  }
+
+  drawSceneGrade();
+
   // impact flash, above the world but under the HUD
   if(state.flash>0){
     ctx.fillStyle=`rgba(255,255,255,${Math.min(0.5, state.flash/34)})`;
     ctx.fillRect(0,0,W,H);
+  }
+  if(state.scene==='cutscene'){
+    ctx.fillStyle='#090b10';ctx.fillRect(0,0,W,22);ctx.fillRect(0,H-22,W,22);
+    const vg=ctx.createRadialGradient(W/2,H/2,90,W/2,H/2,Math.max(W,H)*.72);
+    vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,.42)');ctx.fillStyle=vg;ctx.fillRect(0,0,W,H);
+  }
+  if(boss.active&&!boss.started){
+    const px=W/2,py=H-92;
+    ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle='rgba(8,9,12,.82)';ctx.fillRect(px-170,py-18,340,38);
+    ctx.strokeStyle='rgba(190,148,99,.78)';ctx.lineWidth=1;ctx.strokeRect(px-170,py-18,340,38);
+    const controller=state.controlMode==='controller',key=controller?'✕':'Enter';
+    drawControlBadge(key,px-31,py+1,controller,.9);
+    ctx.fillStyle='#f1d5a4';ctx.font='bold 13px "Segoe UI",system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
+    ctx.fillText('Action',px-9,py+1);
+    ctx.restore();
   }
 }
