@@ -13,7 +13,7 @@ import {cv,ctx} from './canvas.js?v=20261002-23';
 import {W, H} from './config.js?v=20261002-23';
 import {state, keys, pad, input, clearQueued} from './state.js?v=20261002-23';
 import {audio, resumeAudio, startBgm, syncBgmMute} from './audio.js?v=20261002-23';
-import {updateIntro, drawIntro, handleIntroKey, handleIntroGamepad, handleIntroClick, setIntroPointer} from './scenes/BootScene.js?v=20261002-23';
+import {updateIntro, drawIntro, handleIntroKey, handleIntroGamepad, handleIntroClick, setIntroPointer} from './scenes/BootScene.js?v=20261010-1';
 import {updatePlay, drawWorld, reset} from './scenes/GameScene.js?v=20261002-23';
 import {updateCutscene, advanceCutscene, drawCutscenePrompt} from './scenes/CutsceneScene.js?v=20261002-23';
 import {drawCredits} from './scenes/CreditsScene.js?v=20261002-23';
@@ -23,6 +23,8 @@ const STEP = 1000/60;          // fixed logic tick (ms)
 const MAX_STEPS = 5;           // clamp catch-up so a stall can't spiral
 let lastControlsMarkup='';
 function syncControlsStrip(){
+  const strip=document.getElementById('controls-strip');
+  if(strip)strip.hidden=!state.controlModeChosen;
   const row=document.getElementById('controls-items');
   const title=document.getElementById('controls-title');
   if(!row)return;
@@ -83,7 +85,6 @@ function wireInput(scene){
   addEventListener('keydown',e=>{
     if(['Space','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
     startBgm();   // first gesture unblocks autoplay; no-op afterwards
-    if(!state.controlModeChosen)state.controlMode='keyboard';
     // Title → language → difficulty → player-paced cinematic.
     if(state.scene==='intro'){
       if(!e.repeat)handleIntroKey(e.code);
@@ -121,7 +122,6 @@ function wireInput(scene){
   cvEl.addEventListener('mousemove',e=>{const p=introPoint(e);setIntroPointer(p.x,p.y);});
   cvEl.addEventListener('mousedown', e=>{
     startBgm();
-    if(!state.controlModeChosen)state.controlMode='keyboard';
     if(state.scene==='intro'){
       if(e.button===0){const p=introPoint(e);handleIntroClick(p.x,p.y);}
       return;
@@ -166,7 +166,6 @@ function pollGamepad(){
   const usedController=cross||circle||square||triangle||l1||leftEdge||rightEdge;
   if(usedController){
     startBgm();
-    if(!state.controlModeChosen)state.controlMode='controller';
   }
   if(state.scene==='intro'){
     if(leftEdge)handleIntroGamepad('left');

@@ -5,13 +5,16 @@ import {state} from '../state.js?v=20261002-23';
 import {player,cadre} from '../entities.js?v=20261002-23';
 import {drawBackground,drawGround,drawHari,drawEnemy,drawMuna,drawVillager,drawHouse,drawDaraj,drawBoudha,drawHomeCutaway,drawSceneGrade,drawControlBadge} from '../render.js?v=20261002-23';
 
-const MENU={title:'title',language:'language',difficulty:'difficulty',story:'story',launch:'launch'};
+const MENU={title:'title',controls:'controls',language:'language',difficulty:'difficulty',story:'story',launch:'launch'};
 const SHOT_COUNT=introLines.length, FADE=14;
 const introRaider=cadre(0,'cadre');
+const titleArt=new Image();
+titleArt.src='assets/khukuri-title.jpg';
 let menu=MENU.title,storyIndex=0,shotT=0,launchT=0,mouse={x:-1,y:-1},padFocus=0;
-const startButton={x:W/2-100,y:318,w:200,h:46};
-const keyboardChoice={x:W/2-144,y:153,w:136,h:31};
-const controllerChoice={x:W/2+8,y:153,w:136,h:31};
+const startButton={x:W/2-100,y:30,w:200,h:46};
+const keyboardChoice={x:W/2-144,y:166,w:136,h:48};
+const controllerChoice={x:W/2+8,y:166,w:136,h:48};
+const continueButton={x:W/2-100,y:285,w:200,h:42};
 const casualButton={x:W/2-190,y:246,w:170,h:58};
 const warriorButton={x:W/2+20,y:246,w:170,h:58};
 const englishButton={x:W/2-190,y:246,w:170,h:58};
@@ -28,9 +31,16 @@ function chooseLanguage(value){state.language=value;document.documentElement.lan
 function chooseDifficulty(value){state.difficulty=value;startStory();}
 export function handleIntroGamepad(action){
   if(menu===MENU.title){
-    if(action==='left'){state.controlMode='keyboard';state.controlModeChosen=true;}
-    if(action==='right'){state.controlMode='controller';state.controlModeChosen=true;}
-    if(action==='confirm')handleIntroKey('Enter');return;
+    if(action==='confirm')menu=MENU.controls;return;
+  }
+  if(menu===MENU.controls){
+    if(action==='left')padFocus=0;
+    if(action==='right')padFocus=1;
+    if(action==='confirm'){
+      if(!state.controlModeChosen){state.controlMode=padFocus===0?'keyboard':'controller';state.controlModeChosen=true;}
+      else menu=MENU.language;
+    }
+    return;
   }
   if(menu===MENU.language||menu===MENU.difficulty){
     if(action==='left')padFocus=0;
@@ -41,10 +51,17 @@ export function handleIntroGamepad(action){
   if(menu===MENU.story&&action==='confirm')handleIntroKey('Enter');
 }
 export function handleIntroKey(code){
-  if(menu===MENU.title&&(code==='ArrowLeft'||code==='ArrowRight')){
-    state.controlMode=code==='ArrowLeft'?'keyboard':'controller';state.controlModeChosen=true;return;
+  if(menu===MENU.title&&(code==='Enter'||code==='Space')){menu=MENU.controls;return;}
+  if(menu===MENU.controls){
+    if(code==='ArrowLeft')padFocus=0;if(code==='ArrowRight')padFocus=1;
+    if(code==='Digit1'||code==='Numpad1'){padFocus=0;state.controlMode='keyboard';state.controlModeChosen=true;return;}
+    if(code==='Digit2'||code==='Numpad2'){padFocus=1;state.controlMode='controller';state.controlModeChosen=true;return;}
+    if(code==='Enter'||code==='Space'){
+      if(!state.controlModeChosen){state.controlMode=padFocus===0?'keyboard':'controller';state.controlModeChosen=true;}
+      else menu=MENU.language;
+    }
+    return;
   }
-  if(menu===MENU.title&&(code==='Enter'||code==='Space')){menu=MENU.language;return;}
   if(menu===MENU.language){
     if(code==='ArrowLeft')padFocus=0;if(code==='ArrowRight')padFocus=1;
     if(code==='Enter'||code==='Space')code=padFocus===0?'Digit1':'Digit2';
@@ -66,9 +83,10 @@ export function handleIntroKey(code){
 }
 export function setIntroPointer(x,y){mouse={x,y};}
 export function handleIntroClick(x,y){
-  if(menu===MENU.title&&inside(keyboardChoice,x,y)){state.controlMode='keyboard';state.controlModeChosen=true;return;}
-  if(menu===MENU.title&&inside(controllerChoice,x,y)){state.controlMode='controller';state.controlModeChosen=true;return;}
-  if(menu===MENU.title&&inside(startButton,x,y)){menu=MENU.language;return;}
+  if(menu===MENU.title&&inside(startButton,x,y)){menu=MENU.controls;return;}
+  if(menu===MENU.controls&&inside(keyboardChoice,x,y)){state.controlMode='keyboard';state.controlModeChosen=true;padFocus=0;return;}
+  if(menu===MENU.controls&&inside(controllerChoice,x,y)){state.controlMode='controller';state.controlModeChosen=true;padFocus=1;return;}
+  if(menu===MENU.controls&&inside(continueButton,x,y)&&state.controlModeChosen){menu=MENU.language;return;}
   if(menu===MENU.language){if(inside(englishButton,x,y))chooseLanguage('en');if(inside(nepaliButton,x,y))chooseLanguage('ne');return;}
   if(menu===MENU.difficulty){
     if(inside(casualButton,x,y))chooseDifficulty('casual');
@@ -203,15 +221,27 @@ function controlsCard(){
   ctx.restore();
 }
 function titleMenu(){
-  drawStage(0,state.t);ctx.fillStyle='rgba(5,9,15,.4)';ctx.fillRect(0,22,W,H-44);
-  text('KHUKURI',W/2,101,38,'#f0c866','bold');
-  text(state.language==='en'?'Choose controls  ·  ← / → or D-pad to switch':'Controls chhannuhos  ·  arrow wa D-pad le badalnuhos',W/2,143,10,'#d5c6aa');
-  modeChoice(keyboardChoice,'Keyboard',state.controlMode==='keyboard');
-  modeChoice(controllerChoice,'Controller',state.controlMode==='controller');
-  controlsCard();
-  button(startButton,state.language==='en'?'Start':'Katha suru garne','');
-  drawControlBadge(state.controlMode==='controller'?'✕':'Enter',W/2-27,378,state.controlMode==='controller',.9);
-  text('Action',W/2+11,378,11,'#d6c9b2');
+  ctx.fillStyle='#101a2a';ctx.fillRect(0,0,W,H);
+  if(titleArt.complete&&titleArt.naturalWidth){
+    const scale=Math.max(W/titleArt.naturalWidth,H/titleArt.naturalHeight);
+    const dw=titleArt.naturalWidth*scale,dh=titleArt.naturalHeight*scale;
+    ctx.drawImage(titleArt,(W-dw)/2,(H-dh)/2,dw,dh);
+  }else{drawStage(0,state.t);}
+  const shade=ctx.createLinearGradient(0,0,0,H);shade.addColorStop(0,'rgba(5,12,20,.08)');shade.addColorStop(.58,'rgba(5,12,20,.08)');shade.addColorStop(1,'rgba(5,12,20,.82)');ctx.fillStyle=shade;ctx.fillRect(0,0,W,H);
+  button(startButton,'Start','');
+  drawControlBadge('Enter',W/2-26,88,false,.9);text('or press a button',W/2+42,88,10,'#e8ddc8');
+}
+function controlsMenu(){
+  drawStage(0,state.t);ctx.fillStyle='rgba(5,9,15,.7)';ctx.fillRect(0,22,W,H-44);
+  text('CHOOSE HOW TO PLAY',W/2,105,23,'#f0c866','bold');
+  text('Select an input method to see its controls below.',W/2,133,12,'#d5c6aa');
+  modeChoice(keyboardChoice,'Keyboard & Mouse',state.controlModeChosen?state.controlMode==='keyboard':padFocus===0);
+  modeChoice(controllerChoice,'Controller',state.controlModeChosen?state.controlMode==='controller':padFocus===1);
+  if(state.controlModeChosen){
+    button(continueButton,'Continue','');
+    drawControlBadge(state.controlMode==='controller'?'✕':'Enter',W/2-27,354,state.controlMode==='controller',.9);
+    text('Continue',W/2+12,354,11,'#d6c9b2');
+  }else text('← / → choose · Enter to select',W/2,275,11,'#d5c6aa');
 }
 function languageMenu(){
   drawStage(0,state.t);ctx.fillStyle='rgba(5,9,15,.58)';ctx.fillRect(0,22,W,H-44);
@@ -242,6 +272,7 @@ function drawMenuActionHint(prefix,y){
 }
 export function drawIntro(){
   if(menu===MENU.title){titleMenu();return;}
+  if(menu===MENU.controls){controlsMenu();return;}
   if(menu===MENU.language){languageMenu();return;}
   if(menu===MENU.difficulty){difficultyMenu();return;}
   if(menu===MENU.launch){

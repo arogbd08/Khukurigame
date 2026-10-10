@@ -424,3 +424,14 @@ No test framework. Verify with headless Edge via `puppeteer-core` (no Chromium d
 ## Follow-up (2026-10-02 — sharper mountain silhouettes)
 1. Replaced the soft, noisy ridge profiles with spaced angular peaks across the far, middle, and near parallax layers. Added restrained light/shadow facets and larger jagged snowcaps to make the distant range read more clearly as mountains while retaining the dark palette.
 2. Refreshed local module and stylesheet URLs to `?v=20261002-23`. `git diff --check` passed; no gameplay test was run.
+
+## Presentation (2026-10-03)
+1. Edited `Khukuri_Presentation (1).pptx` into `outputs/Khukuri_Presentation_illustrated.pptx`, retaining the 14-slide deck and visual style.
+2. Added six direct game captures across slides 2, 7, 9, and 11: romanized-Nepali opening, combat, village gameplay, story raid, title/controls, and playable scene. Existing cover key art remains.
+3. Added image-placement suggestions on slide 4 and presenter notes on slides 2, 4–12 with concrete context for real-game, film, book, and interface images.
+4. Validated as a 14-slide PPTX and rendered all slides for visual review. The demo screenshots use English gameplay/menu text except for the opening story captures, which show romanized Nepali.
+
+## Follow-up (2026-10-10 — cover start and input selection)
+1. Added the presentation cover artwork as `assets/khukuri-title.jpg` and use it on a distinct first start screen.
+2. Added a separate Keyboard & Mouse / Controller selection screen before language and difficulty. Keyboard, mouse, and gamepad users can select their preferred mode; the below-game controls strip stays hidden until an explicit choice, then shows only that mode's mapping.
+3. Shifted page and canvas chrome toward the cover's midnight blue, teal, and muted gold palette. No automated tests or browser preview were run.
