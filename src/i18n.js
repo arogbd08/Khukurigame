@@ -32,7 +32,11 @@ const en = new Map([
   ['Muna: "Raju!"','Muna: “Raju!”'],
   ['Raju: "Ke chaaaa mero baaby — hinda na, Kathmandu jaaun kina late garira"','Raju: “There you are, baby! Come on, let’s go to Kathmandu. Why are we late?”'],
   ['Muna: "La hus Hari! Bheti rakhumla! Au Raju Jum"','Muna: “All right, Hari! See you around! Come on, Raju, let’s go.”'],
-  ['Hari: "...muji."','Hari: “...muji.”']
+  ['Hari: "...muji."','Hari: “...muji.”'],
+  ['Hari: "Ko hos ta? Ma bata Muna chorne? Feri?!"','Hari: “Who are you? Stealing Muna from me again?!”'],
+  ['Raju: "Ae! Ke gareko?!"','Raju: “Hey! What did you do?!”'],
+  ['Muna: "Hari! Timile Raju lai kina hanyo?!"','Muna: “Hari! Why did you hit Raju?!”'],
+  ['Muna: "Ma timisanga jadina! Raju, jau!"','Muna: “I’m not going with you! Raju, let’s go!”']
 ]);
 
 export function subtitleText(text,language){

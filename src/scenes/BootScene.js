@@ -1,9 +1,9 @@
-import {ctx} from '../canvas.js?v=20261002-23';
-import {W,H,GROUND,introLines,STUPA_X,STUPA_SCALE} from '../config.js?v=20261002-23';
-import {introLinesEn} from '../i18n.js?v=20261002-23';
-import {state} from '../state.js?v=20261002-23';
-import {player,cadre} from '../entities.js?v=20261002-23';
-import {drawBackground,drawGround,drawHari,drawEnemy,drawMuna,drawVillager,drawHouse,drawDaraj,drawBoudha,drawHomeCutaway,drawSceneGrade,drawControlBadge} from '../render.js?v=20261002-23';
+import {ctx} from '../canvas.js?v=20261010-4';
+import {W,H,GROUND,introLines,STUPA_X,STUPA_SCALE} from '../config.js?v=20261010-4';
+import {introLinesEn} from '../i18n.js?v=20261010-4';
+import {state} from '../state.js?v=20261010-4';
+import {player,cadre} from '../entities.js?v=20261010-4';
+import {drawBackground,drawGround,drawHari,drawEnemy,drawMuna,drawVillager,drawHouse,drawDaraj,drawBoudha,drawHomeCutaway,drawSceneGrade,drawControlBadge} from '../render.js?v=20261010-4';
 
 const MENU={title:'title',controls:'controls',language:'language',difficulty:'difficulty',story:'story',launch:'launch'};
 const SHOT_COUNT=introLines.length, FADE=14;
@@ -207,11 +207,11 @@ function controlsCard(){
   const rows=controller?[
     [['LS / D-pad',ne?'hidne':'Move'],['✕',ne?'Jump / Action':'Jump / Action']],
     [['○',ne?'dodge':'Dodge'],['△','Ultimate']],
-    [['□',ne?'prahar':'Attack'],['L1',ne?'rokne':'Block']]
+    [['□',ne?'prahar':'Attack'],['L1',ne?'rokne / parry':'Block / Parry']]
   ]:[
     [['A / D',ne?'hidne':'Move'],['W / Space',ne?'chhalne':'Jump']],
     [['Shift',ne?'dodge':'Dodge'],['E','Ultimate']],
-    [['Enter','Action'],['Right-click',ne?'rokne':'Block']],
+    [['Enter','Action'],['Right-click',ne?'rokne / parry':'Block / Parry']],
     [['Click',ne?'prahar':'Attack']]
   ];
   for(let i=0;i<rows.length;i++){

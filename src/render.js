@@ -1,7 +1,7 @@
-import {ctx} from './canvas.js?v=20261002-23';
-import {W, H, GROUND, WORLD, PARRY_ACTIVE, MOVES, COMBO_GAP, DEATHBLOW_FRAMES, GROUND_GAPS, DUNGEON_PITS, VILLAGE_HOUSES, STUPA_X, STUPA_SCALE, DUNGEON_ENTRY_X, DUNGEON_ENTRY_END, DUNGEON_FLOOR, DUNGEON_BOSS_ROOM_START, DUNGEON_STEPS, DUNGEON_ALCOVES} from './config.js?v=20261002-23';
-import {state, sub, sparks, toasts, diff} from './state.js?v=20261002-23';
-import {player, plats, boss, cage, cs} from './entities.js?v=20261002-23';
+import {ctx} from './canvas.js?v=20261010-4';
+import {W, H, GROUND, WORLD, PARRY_ACTIVE, ULT_MAX_CHARGES, ULT_RECHARGE_FRAMES, MOVES, COMBO_GAP, DEATHBLOW_FRAMES, GROUND_GAPS, DUNGEON_PITS, VILLAGE_HOUSES, STUPA_X, STUPA_SCALE, DUNGEON_ENTRY_X, DUNGEON_ENTRY_END, DUNGEON_FLOOR, DUNGEON_BOSS_ROOM_START, DUNGEON_STEPS, DUNGEON_ALCOVES} from './config.js?v=20261010-4';
+import {state, sub, sparks, toasts, diff, input} from './state.js?v=20261010-4';
+import {player, plats, boss, cage, cs} from './entities.js?v=20261010-4';
 
 /* ================= SKY & PARALLAX BACKGROUND =================
    Layers, far to near. Each layer scrolls at its own fraction of the camera,
@@ -497,6 +497,7 @@ export function drawHari(){
   const moving   = p.onGround && Math.abs(p.vx)>0.4;
   const airborne = !p.onGround;
   const parrying = p.parry>0;
+  const guarding = parrying||input.guardMouse||input.guardPad;
   const wp       = p.walkPhase;
   const cpose    = attackPose(p, mv);
   // ULT = iai-jutsu: a down→up rising KATANA draw-cut, driven by p.ult (24→0)
@@ -552,7 +553,7 @@ export function drawHari(){
   let fA,fB;
   if(airborne){ if(p.vy<0){ fA={x:-8,y:50}; fB={x:8,y:45}; } else { fA={x:-10,y:57}; fB={x:10,y:53}; } }
   else if(pose && pose.phase!=='rec'){ fA={x:-11,y:58}; fB={x:12,y:57}; }   // wide fighting stance
-  else if(parrying){ fA={x:-9,y:58}; fB={x:9,y:58}; }
+  else if(guarding){ fA={x:-9,y:58}; fB={x:9,y:58}; }
   else if(moving){ const s1=Math.sin(wp),s2=Math.sin(wp+Math.PI);
     fA={x:s1*9,y:58-Math.max(0,s1)*6}; fB={x:s2*9,y:58-Math.max(0,s2)*6}; }
   else if(meditating){ fA={x:-15,y:47}; fB={x:15,y:47}; }
@@ -570,7 +571,7 @@ export function drawHari(){
     let ox,oy;
     if(pose){ ox=pose.phase==='hit'?-16:-13; oy=pose.phase==='hit'?24:34; }        // counterbalance
     else if(airborne){ ox=-13; oy=p.vy<0?18:34; }
-    else if(parrying){ ox=6; oy=30; }
+    else if(guarding){ ox=6; oy=30; }
     else if(moving){ ox=-8+Math.sin(wp+Math.PI)*6; oy=34+Math.abs(Math.sin(wp))*3; }
     else if(meditating){ ox=-5; oy=38+Math.sin(p.breathe)*0.4; }
     else { ox=-11; oy=38+Math.sin(p.breathe)*1.2; }
@@ -597,6 +598,10 @@ export function drawHari(){
     ctx.fillStyle=`rgba(255,176,56,${0.6*p.parryFlash/10})`;
     ctx.beginPath(); ctx.arc(16,26,5,0,7); ctx.fill();
   }
+  if(p.blockFlash>0){
+    ctx.strokeStyle=`rgba(169,217,237,${p.blockFlash/12})`;ctx.lineWidth=2.2;
+    ctx.beginPath();ctx.arc(16,27,9,-1.2,1.2);ctx.stroke();
+  }
 
   /* ---- smear ribbon behind the blade ---- */
   drawTrail();
@@ -606,7 +611,7 @@ export function drawHari(){
     // hand target: attack/ult pose, else guard / airborne / walk / idle drift
     let hx,hy,rot;
     if(pose){ hx=pose.hx; hy=pose.hy; rot=pose.rot; }
-    else if(parrying){ hx=16; hy=24; rot=p.parry>PT?-1.7:-1.4; }   // blade raised to guard
+    else if(guarding){ hx=16; hy=24; rot=p.parry>PT?-1.7:-1.4; }   // blade raised to guard
     else if(airborne){ hx=16; hy=30; rot=p.vy<0?-1.2:-0.7; }
     else if(moving){ hx=15; hy=31+Math.sin(wp)*1.5; rot=-0.7+Math.sin(wp)*0.16; }
     else if(meditating){ hx=9; hy=40+Math.sin(p.breathe)*0.4; rot=-0.2; }
@@ -912,9 +917,11 @@ export function drawHealOrb(x,y){
   ctx.fillText('+2',x,y+3); ctx.textAlign='left';
 }
 
-export function drawMuna(x,y){ ctx.save(); ctx.translate(x,y+Math.sin(state.t/38)*0.8);
+export function drawMuna(x,y,run=0){ ctx.save(); ctx.translate(x,y+Math.sin(state.t/38)*0.8);
   // Layered village dress and shawl, drawn with the same warm, inked shapes as Hari.
   ctx.fillStyle='rgba(4,5,7,.26)';ctx.beginPath();ctx.ellipse(0,51,14,3,0,0,7);ctx.fill();
+  if(run){const step=Math.sin(run)*3;ctx.strokeStyle='#33231d';ctx.lineWidth=3;ctx.lineCap='round';ctx.beginPath();
+    ctx.moveTo(-4,45);ctx.lineTo(-5+step,53);ctx.moveTo(4,45);ctx.lineTo(5-step,53);ctx.stroke();}
   ctx.fillStyle='#2a1717';ctx.beginPath();ctx.moveTo(-8,19);ctx.lineTo(8,19);ctx.lineTo(13,49);ctx.quadraticCurveTo(0,54,-13,49);ctx.closePath();ctx.fill();
   ctx.fillStyle='#80352f';ctx.beginPath();ctx.moveTo(-7,19);ctx.lineTo(7,19);ctx.lineTo(10,46);ctx.lineTo(-10,46);ctx.closePath();ctx.fill();
   ctx.fillStyle='#285642';ctx.beginPath();ctx.moveTo(-9,38);ctx.lineTo(9,38);ctx.lineTo(12,49);ctx.quadraticCurveTo(0,53,-12,49);ctx.closePath();ctx.fill();
@@ -937,10 +944,11 @@ export function drawMuna(x,y){ ctx.save(); ctx.translate(x,y+Math.sin(state.t/38
   ctx.fillStyle='rgba(177,87,67,.42)';ctx.beginPath();ctx.arc(-6,12,1.5,0,7);ctx.arc(6,12,1.5,0,7);ctx.fill();
   ctx.fillStyle='#d8b879';ctx.beginPath();ctx.arc(-8,11,1.3,0,7);ctx.arc(8,11,1.3,0,7);ctx.fill();
   ctx.restore(); }
-export function drawRaju(x,y){ ctx.save(); ctx.translate(x,y+Math.sin(state.t/30)*1.1);
+export function drawRaju(x,y,run=0){ ctx.save(); ctx.translate(x,y+Math.sin(state.t/30)*1.1);
+  const stride=run?Math.sin(run)*3:0;
   ctx.fillStyle='rgba(4,5,7,.24)';ctx.beginPath();ctx.ellipse(0,51,13,3,0,0,7);ctx.fill();
-  ctx.fillStyle='#d8d1c0';ctx.beginPath();ctx.moveTo(-8,42);ctx.lineTo(-1,42);ctx.lineTo(-2,51);ctx.lineTo(-8,51);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(1,42);ctx.lineTo(8,42);ctx.lineTo(8,51);ctx.lineTo(2,51);ctx.closePath();ctx.fill();
-  ctx.fillStyle='#17191d';ctx.beginPath();ctx.moveTo(-9,50);ctx.lineTo(-2,50);ctx.lineTo(-2,53);ctx.lineTo(-10,53);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(2,50);ctx.lineTo(9,50);ctx.lineTo(11,53);ctx.lineTo(2,53);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#d8d1c0';ctx.beginPath();ctx.moveTo(-8,42);ctx.lineTo(-1,42);ctx.lineTo(-2+stride,51);ctx.lineTo(-8+stride,51);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(1,42);ctx.lineTo(8,42);ctx.lineTo(8-stride,51);ctx.lineTo(2-stride,51);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#17191d';ctx.beginPath();ctx.moveTo(-9+stride,50);ctx.lineTo(-2+stride,50);ctx.lineTo(-2+stride,53);ctx.lineTo(-10+stride,53);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(2-stride,50);ctx.lineTo(9-stride,50);ctx.lineTo(11-stride,53);ctx.lineTo(2-stride,53);ctx.closePath();ctx.fill();
   ctx.fillStyle='#1e2a3a';ctx.beginPath();ctx.moveTo(-9,18);ctx.lineTo(9,18);ctx.lineTo(12,46);ctx.lineTo(-12,46);ctx.closePath();ctx.fill();
   ctx.fillStyle='#40536c';ctx.beginPath();ctx.moveTo(-8,20);ctx.lineTo(0,23);ctx.lineTo(7,20);ctx.lineTo(9,43);ctx.lineTo(-9,43);ctx.closePath();ctx.fill();
   ctx.fillStyle='#d9cdb6';ctx.beginPath();ctx.moveTo(-5,18);ctx.lineTo(0,24);ctx.lineTo(5,18);ctx.lineTo(3,37);ctx.lineTo(-3,37);ctx.closePath();ctx.fill();
@@ -1023,9 +1031,39 @@ export function drawCage(){
 }
 
 export function drawCutsceneActors(){
+  const runPhase=cs.action==='run'?state.t/3:0;
   drawHari();
-  drawMuna(cs.muna.x, cs.muna.y);
-  if(cs.rajuIn) drawRaju(cs.raju.x, cs.raju.y);
+  drawMuna(cs.muna.x,cs.muna.y,runPhase);
+  if(cs.rajuIn){
+    const t=cs.actionT;
+    const recoil=cs.action==='punch'&&t>=14&&t<38?Math.sin((t-14)/24*Math.PI)*11:0;
+    drawRaju(cs.raju.x+recoil,cs.raju.y,runPhase);
+    if(cs.action==='punch'&&t<32){
+      const reach=t<8?8+t*6:t<15?56:Math.max(8,56-(t-15)*3.2);
+      ctx.save();ctx.translate(player.x+player.w/2,player.y+28);ctx.scale(player.facing,1);
+      ctx.lineCap='round';ctx.strokeStyle='#c98a5e';ctx.lineWidth=7;
+      ctx.beginPath();ctx.moveTo(1,0);ctx.quadraticCurveTo(reach*.48,-7,reach,-3);ctx.stroke();
+      ctx.fillStyle='#d79a6b';ctx.beginPath();ctx.arc(reach,-3,5.5,0,Math.PI*2);ctx.fill();ctx.restore();
+      if(t>=14&&t<24){
+        const x=cs.raju.x-6,y=cs.raju.y+11;ctx.save();ctx.strokeStyle=`rgba(255,225,153,${1-(t-14)/10})`;ctx.lineWidth=2;
+        for(let k=0;k<6;k++){const a=k*Math.PI/3;ctx.beginPath();ctx.moveTo(x+Math.cos(a)*4,y+Math.sin(a)*4);ctx.lineTo(x+Math.cos(a)*13,y+Math.sin(a)*13);ctx.stroke();}ctx.restore();
+      }
+    }
+  }
+  if(cs.action==='slap'&&cs.actionT<28){
+    const t=cs.actionT,reach=t<7?7+t*4.5:t<13?38:Math.max(8,38-(t-13)*3);
+    ctx.save();ctx.translate(cs.muna.x,cs.muna.y+27);ctx.scale(-1,1);
+    ctx.lineCap='round';ctx.strokeStyle='#c98a5e';ctx.lineWidth=6;
+    ctx.beginPath();ctx.moveTo(0,0);ctx.quadraticCurveTo(reach*.48,-8,reach,-4);ctx.stroke();
+    ctx.fillStyle='#d79a6b';ctx.beginPath();ctx.arc(reach,-4,5.5,0,Math.PI*2);ctx.fill();ctx.restore();
+    ctx.save();ctx.strokeStyle='#38241b';ctx.lineWidth=1.7;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(cs.muna.x-6,cs.muna.y+5);ctx.lineTo(cs.muna.x-2,cs.muna.y+3);
+    ctx.moveTo(cs.muna.x+2,cs.muna.y+3);ctx.lineTo(cs.muna.x+6,cs.muna.y+5);ctx.stroke();ctx.restore();
+    if(t>=11&&t<21){
+      const x=player.x+player.w/2-5,y=player.y+15;ctx.save();ctx.strokeStyle=`rgba(255,198,152,${1-(t-11)/10})`;ctx.lineWidth=2;
+      for(let k=0;k<6;k++){const a=k*Math.PI/3;ctx.beginPath();ctx.moveTo(x+Math.cos(a)*4,y+Math.sin(a)*4);ctx.lineTo(x+Math.cos(a)*12,y+Math.sin(a)*12);ctx.stroke();}ctx.restore();
+    }
+  }
 }
 
 /* ---- props ---- */
@@ -1269,6 +1307,11 @@ export function drawHUD(){
     ctx.beginPath(); ctx.arc(86+i*16,72,6,0,7); ctx.fill();
     if(lit){ ctx.strokeStyle=`rgba(255,210,74,${0.35+0.35*Math.sin(state.t/9+i)})`;
       ctx.lineWidth=2; ctx.beginPath(); ctx.arc(86+i*16,72,9,0,7); ctx.stroke(); }
+  }
+  if(player.charges<ULT_MAX_CHARGES){
+    const pct=Math.min(1,player.ultRecharge/ULT_RECHARGE_FRAMES);
+    ctx.strokeStyle='rgba(255,210,74,.95)';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(86+player.charges*16,72,9,-Math.PI/2,-Math.PI/2+Math.PI*2*pct);ctx.stroke();
   }
   ctx.save();ctx.globalAlpha=player.charges>=1?1:.42;
   drawControlBadge(state.controlMode==='controller'?'△':'E',151,72,state.controlMode==='controller',.9);

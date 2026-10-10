@@ -1,24 +1,39 @@
-import {ctx} from '../canvas.js?v=20261002-23';
+import {ctx} from '../canvas.js?v=20261010-4';
 import {W, H, GROUND, WORLD, GROUND_GAPS, DUNGEON_PITS, DUNGEON_ENTRY_X, DUNGEON_ENTRY_END, DUNGEON_FLOOR, DUNGEON_BOSS_ROOM_START, DUNGEON_BOSS_TRIGGER,
         PARRY_DURATION, PARRY_ACTIVE, PARRY_COOLDOWN, PARRY_HITSTOP, PARRY_SHAKE,
-        ULT_COST, ULT_MAX_CHARGES, ULT_DMG_NORMAL, ULT_DMG_HEAVY, ULT_DMG_BOSS,
+        ULT_COST, ULT_MAX_CHARGES, ULT_RECHARGE_FRAMES, ULT_DMG_NORMAL, ULT_DMG_HEAVY, ULT_DMG_BOSS,
         MOVES, COMBO_GAP,
-        STAGGER_FRAMES, POSTURE_REGEN, POSTURE_HIT, POSTURE_BLOCK, POSTURE_PARRY, DEATHBLOW_FRAMES} from '../config.js?v=20261002-23';
+        STAGGER_FRAMES, POSTURE_REGEN, POSTURE_HIT, POSTURE_BLOCK, POSTURE_PARRY, DEATHBLOW_FRAMES} from '../config.js?v=20261010-4';
 import {state, sub, say, toast, keys, pad, input, clearQueued, diff,
-        shakeScreen, flashScreen, burst, updateSparks, updateToasts, toasts} from '../state.js?v=20261002-23';
-import {sfx, resumeBgm} from '../audio.js?v=20261002-23';
-import {over} from '../utils.js?v=20261002-23';
+        shakeScreen, flashScreen, burst, updateSparks, updateToasts, toasts} from '../state.js?v=20261010-4';
+import {sfx, resumeBgm} from '../audio.js?v=20261010-4';
+import {over} from '../utils.js?v=20261010-4';
 import {player, plats, structures, momos, paper, enemies, boss, cage, cadre, cs, yak,
         shots, pthrows, ethrows, drops, shocks, healDrops,
-        resetEnemies, resetMomos} from '../entities.js?v=20261002-23';
+        resetEnemies, resetMomos} from '../entities.js?v=20261010-4';
 import {drawSky, drawBackground, drawGround, drawMomo, drawBlade, drawHealOrb,
         drawPaper, drawCage, drawEnemy, drawBoss, drawHari, drawCutsceneActors, drawForegroundVillage, drawSceneGrade, drawDungeonBackdrop, drawDungeonArchitecture,
-        drawSparks, drawYak, drawControlBadge} from '../render.js?v=20261002-23';
-import {enterCutscene} from './CutsceneScene.js?v=20261002-23';
+        drawSparks, drawYak, drawControlBadge} from '../render.js?v=20261010-4';
+import {enterCutscene} from './CutsceneScene.js?v=20261010-4';
 
 /* ================= HELPERS ================= */
 function invuln(){return player.hurt>0||player.dodge>4||player.ult>4;}   // ult (=iai) dashes with i-frames
-function gainCharge(){ player.charges=Math.min(ULT_MAX_CHARGES,player.charges+1); }
+function advanceUltRecharge(){
+  if(player.charges>=ULT_MAX_CHARGES){player.ultRecharge=0;return;}
+  player.ultRecharge++;
+  if(player.ultRecharge>=ULT_RECHARGE_FRAMES){
+    player.charges=Math.min(ULT_MAX_CHARGES,player.charges+1);player.ultRecharge=0;
+    toast('Ultimate recharged!','#ffe6a0');
+  }
+}
+function canBlockFrom(sourceX){
+  if(player.ult>0||(!input.guardMouse&&!input.guardPad))return false;
+  return player.facing===(sourceX>player.x+player.w/2?1:-1);
+}
+function blockSuccess(){
+  player.blockFlash=8;state.hitstop=Math.max(state.hitstop,2);sfx('parry');
+  burst(player.x+player.w/2+player.facing*14,player.y+30,4,{col:'#a9d9ed',speed:1.8,life:12,grav:0.02});
+}
 
 function hurtPlayer(dir,dmg){
   dmg=Math.max(1, Math.round(dmg*diff().dmgMul));   // difficulty scales damage taken
@@ -43,7 +58,6 @@ function bossFloor(){return DUNGEON_FLOOR;}
 /* Deflect: a small, sharp ORANGE spark burst at the clash point (no big arc),
    plus freeze + shake for weight. Reads as a crisp "ting", not a shield. */
 function parrySuccess(srcX, srcY, target, isBoss){
-  gainCharge();
   state.hitstop=PARRY_HITSTOP;
   shakeScreen(PARRY_SHAKE*0.7);
   flashScreen(3);
@@ -56,7 +70,7 @@ function parrySuccess(srcX, srcY, target, isBoss){
   burst(px,py,6, {col:'#ffe0a0', speed:3.0, life:16, spread:6.283, grav:0.12});
   // deflecting an attack is the fast route to breaking posture
   if(target) addPosture(target, POSTURE_PARRY, isBoss);
-  toast('Pari!  +1','#ffb038');
+  toast('Parry!','#ffb038');
 }
 
 function killEnemy(en){
@@ -134,9 +148,10 @@ export function reset(){
   const D=diff();
   Object.assign(player,{x:60,y:GROUND-58,vx:0,vy:0,onGround:false,facing:1,jumps:2,
     hp:D.maxHp,maxHp:D.maxHp,coins:0,ammo:3,atk:0,throwCd:0,dodge:0,dodgeCd:0,dodgeDir:1,
-    hurt:0,parry:0,parryCd:0,charges:0,ult:0,wasOnGround:false,
+    hurt:0,parry:0,parryCd:0,charges:1,ultRecharge:0,ult:0,wasOnGround:false,
     move:null,mv:null,atkT:0,atkId:0,deathblow:0,dbTarget:null,buffer:null,comboCount:0,comboTimer:0,
-    walkPhase:0,breathe:0,squash:0,parryFlash:0,throwAnim:0,turnLean:0,atkLean:0});
+    walkPhase:0,breathe:0,squash:0,parryFlash:0,blockFlash:0,throwAnim:0,turnLean:0,atkLean:0});
+  input.guardMouse=false;input.guardPad=false;
   resetEnemies(); resetMomos(); paper.got=false;
   Object.assign(boss,{x:7800,y:DUNGEON_FLOOR-112,w:72,h:112,hp:18,maxHp:18,dir:-1,state:'wait',timer:60,hitT:0,
     alive:true,active:false,started:false,phase:1,vx:0,vy:0,summoned:0,barkTimer:0,spinT:0,rageT:0,enrageFlash:0,stomp:0,anim:0,lastAtkId:-1,
@@ -181,6 +196,7 @@ export function updatePlay(){
   }
   if(state.hitstop>0){ state.hitstop--; clearQueued(); return; }
   state.t++;
+  advanceUltRecharge();
   const t=state.t;
 
   /* ---- dodge / ultimate / movement ---- */
@@ -189,6 +205,7 @@ export function updatePlay(){
   if(player.parryCd>0)player.parryCd--;
   if(player.parry>0)player.parry--;
   if(player.parryFlash>0)player.parryFlash--;
+  if(player.blockFlash>0)player.blockFlash--;
   if(player.throwAnim>0)player.throwAnim--;
   if(player.squash>0)player.squash=Math.max(0,player.squash-0.09);
   player.breathe+=0.06;
@@ -294,7 +311,10 @@ export function updatePlay(){
     if(--yak.charge<=0||yak.x<yak.min-50||yak.x>yak.max+50){yak.state='recover';yak.charge=45;yak.cooldown=150;}
   }else if(--yak.charge<=0)yak.state='graze';
   if(over(player,yak)&&yak.hitCooldown===0){
-    hurtPlayer(yak.dir,1);player.vx=yak.dir*8;yak.hitCooldown=60;
+    if(player.parry>diff().parryThresh){parrySuccess(yak.x+yak.w/2,yak.y+24);yak.state='recover';yak.charge=45;}
+    else if(canBlockFrom(yak.x+yak.w/2)){blockSuccess();yak.state='recover';yak.charge=45;}
+    else{hurtPlayer(yak.dir,1);player.vx=yak.dir*8;}
+    yak.hitCooldown=60;
     if(yak.state==='charge'){yak.state='recover';yak.charge=45;yak.cooldown=150;}
   }
 
@@ -313,9 +333,9 @@ export function updatePlay(){
     : 0;
   player.atkLean += (atkLeanTarget-player.atkLean)*0.3;
 
-  /* ---- parry ----
-     Longer stance, longer active window and a short cooldown: mistiming costs
-     you tempo rather than locking you out. `parrying` is the deflect window. */
+  /* ---- guard / timed parry ----
+     A fresh press opens the short deflect window. Continuing to hold the same
+     input guards frontal hits after that window has elapsed. */
   if(input.parryQ && player.parryCd===0 && player.ult<=0){
     player.parry=PARRY_DURATION; player.parryCd=PARRY_COOLDOWN; cancelCombo();  // parry cancels attacks
     burst(player.x+player.w/2+player.facing*14, player.y+30, 5,
@@ -480,6 +500,7 @@ export function updatePlay(){
         e.state='recover'; e.timer=70; e.hitT=14; e.vx=0;
         e.x += (dx>0?1:-1)*22;
       }
+      else if(canBlockFrom(e.x+e.w/2)){blockSuccess();e.state='recover';e.timer=28;e.hitT=12;e.vx=0;}
       else if(!invuln()) hurtPlayer(dx>0?-1:1, e.type==='heavy'?2 : e.state==='lunge'?1:2);
     }
   }
@@ -552,6 +573,7 @@ export function updatePlay(){
           parrySuccess((player.x+boss.x+boss.w/2)/2, player.y+28, boss, true);
           boss.state='wait';boss.timer=60; boss.x-=boss.dir*20;
         }
+        else if(canBlockFrom(boss.x+boss.w/2)){blockSuccess();boss.state='wait';boss.timer=42;boss.x-=boss.dir*10;}
         else if(!invuln()) hurtPlayer(boss.dir,1);
       }
       if(--boss.timer<=0){boss.state='wait';boss.timer=72;}
@@ -579,6 +601,7 @@ export function updatePlay(){
           parrySuccess((player.x+boss.x+boss.w/2)/2, player.y+28, boss, true);
           boss.vx=-boss.dir*3;
         }
+        else if(canBlockFrom(boss.x+boss.w/2)){blockSuccess();boss.leapParried=true;boss.vx=-boss.dir*2;boss.vy=-2;}
         else if(!invuln()&&!parrying) hurtPlayer(boss.dir,1);
       }
       if(boss.y>=bossFloor()-boss.h){
@@ -609,6 +632,7 @@ export function updatePlay(){
           parrySuccess((player.x+boss.x+boss.w/2)/2, player.y+28, boss, true);
           boss.state='wait';boss.timer=70;boss.spinT=0; boss.x-=boss.dir*24;
         }
+        else if(canBlockFrom(boss.x+boss.w/2)){blockSuccess();boss.state='wait';boss.timer=42;boss.spinT=0;boss.x-=boss.dir*14;}
         else if(!invuln()) hurtPlayer(boss.dir,2);
       }
       if(boss.spinT<=0){boss.state='wait';boss.timer=90;}
@@ -683,6 +707,7 @@ export function updatePlay(){
         parrySuccess(s.x, s.y);
         s.dead=true;
       }
+      else if(canBlockFrom(s.x-(s.vx>0?20:-20))){blockSuccess();s.dead=true;}
       else if(!invuln()) hurtPlayer(s.vx>0?1:-1,1);
     }
   }
@@ -693,6 +718,7 @@ export function updatePlay(){
     if(over({x:s.x,y:s.y,w:12,h:10},player)){
       // deflected shots become YOUR projectile, fired back faster
       if(parrying){ parrySuccess(s.x,s.y); pthrows.push({x:s.x,y:s.y,vx:-s.vx*1.3,spin:0,life:70}); s.dead=true; }
+      else if(canBlockFrom(s.x-s.vx*4)){blockSuccess();s.dead=true;}
       else if(!invuln()){ hurtPlayer(s.vx>0?1:-1,1); s.dead=true; } } }
   for(let i=shots.length-1;i>=0;i--){const s=shots[i]; if(s.dead||s.y>DUNGEON_FLOOR+H||s.x<0||s.x>WORLD)shots.splice(i,1);}
 
@@ -707,6 +733,7 @@ export function updatePlay(){
   for(const s of ethrows){ s.x+=s.vx; s.vy+=0.16; s.y+=s.vy; s.spin+=0.4;
     if(over({x:s.x-6,y:s.y-6,w:12,h:12},player)){
       if(parrying){ parrySuccess(s.x,s.y); pthrows.push({x:s.x,y:s.y,vx:-s.vx*1.3,spin:0,life:70}); s.dead=true; }
+      else if(canBlockFrom(s.x-s.vx*4)){blockSuccess();s.dead=true;}
       else if(!invuln()){ hurtPlayer(s.vx>0?1:-1,1); s.dead=true; } } }
   for(let i=ethrows.length-1;i>=0;i--){const s=ethrows[i]; if(s.dead||s.y>DUNGEON_FLOOR+H||s.x<0||s.x>WORLD)ethrows.splice(i,1);}
 

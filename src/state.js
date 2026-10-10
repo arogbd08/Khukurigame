@@ -1,5 +1,5 @@
-import {SUB_MIN_FRAMES, SUB_PER_CHAR, SUB_MAX_FRAMES, DIFF} from './config.js?v=20261002-23';
-import {subtitleText} from './i18n.js?v=20261002-23';
+import {SUB_MIN_FRAMES, SUB_PER_CHAR, SUB_MAX_FRAMES, DIFF} from './config.js?v=20261010-4';
+import {subtitleText} from './i18n.js?v=20261010-4';
 
 /* Mutable cross-module game state. Kept as one object so ES module
    consumers all observe the same live values. */
@@ -82,8 +82,10 @@ export const keys = {};
 // release input without cancelling the other device's held movement.
 export const pad = {left:false,right:false};
 // lightQ carries left-click or controller Square attack input. Right mouse / L1
-// parries; E / Triangle is Ultimate. Cross queues jump plus contextual Action.
-export const input = {jumpQ:false, lightQ:false, dodgeQ:false, parryQ:false, ultQ:false, actionQ:false};
+// are held guard inputs with a timed parry on press; E / Triangle is Ultimate.
+// Cross queues jump plus contextual Action.
+export const input = {jumpQ:false, lightQ:false, dodgeQ:false, parryQ:false, ultQ:false, actionQ:false,
+  guardMouse:false,guardPad:false};
 export function clearQueued(){
   input.jumpQ=input.lightQ=input.dodgeQ=input.parryQ=input.ultQ=input.actionQ=false;
 }

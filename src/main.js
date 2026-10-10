@@ -9,15 +9,15 @@
        texture and re-uploads it each frame via texture.refresh().
    Keyboard/mouse input stays on DOM listeners; gamepads are polled once per
    rendered frame and their action buttons are edge-triggered. */
-import {cv,ctx} from './canvas.js?v=20261002-23';
-import {W, H} from './config.js?v=20261002-23';
-import {state, keys, pad, input, clearQueued} from './state.js?v=20261002-23';
-import {audio, resumeAudio, startBgm, syncBgmMute} from './audio.js?v=20261002-23';
-import {updateIntro, drawIntro, handleIntroKey, handleIntroGamepad, handleIntroClick, setIntroPointer} from './scenes/BootScene.js?v=20261010-1';
-import {updatePlay, drawWorld, reset} from './scenes/GameScene.js?v=20261002-23';
-import {updateCutscene, advanceCutscene, drawCutscenePrompt} from './scenes/CutsceneScene.js?v=20261002-23';
-import {drawCredits} from './scenes/CreditsScene.js?v=20261002-23';
-import {drawHUD, drawSubtitle, drawToasts} from './render.js?v=20261002-23';
+import {cv,ctx} from './canvas.js?v=20261010-4';
+import {W, H} from './config.js?v=20261010-4';
+import {state, keys, pad, input, clearQueued} from './state.js?v=20261010-4';
+import {audio, resumeAudio, startBgm, syncBgmMute} from './audio.js?v=20261010-4';
+import {updateIntro, drawIntro, handleIntroKey, handleIntroGamepad, handleIntroClick, setIntroPointer} from './scenes/BootScene.js?v=20261010-4';
+import {updatePlay, drawWorld, reset} from './scenes/GameScene.js?v=20261010-4';
+import {updateCutscene, advanceCutscene, drawCutscenePrompt, moveCutsceneChoice, handleCutsceneClick} from './scenes/CutsceneScene.js?v=20261010-4';
+import {drawCredits} from './scenes/CreditsScene.js?v=20261010-4';
+import {drawHUD, drawSubtitle, drawToasts} from './render.js?v=20261010-4';
 
 const STEP = 1000/60;          // fixed logic tick (ms)
 const MAX_STEPS = 5;           // clamp catch-up so a stall can't spiral
@@ -34,11 +34,11 @@ function syncControlsStrip(){
   const rows=controller?[
     [['LS / D-pad',label('Move','hidne')],['✕','Jump / Action']],
     [['○',label('Dodge','dodge')],['△','Ultimate']],
-    [['□',label('Attack','prahar')],['L1',label('Block','rokne')]]
+    [['□',label('Attack','prahar')],['L1',label('Block / Parry','rokne / parry')]]
   ]:[
     [['A / D',label('Move','hidne')],['W / Space',label('Jump','chhalne')]],
     [['Shift',label('Dodge','dodge')],['E','Ultimate']],
-    [['Enter','Action'],['Right-click',label('Block','rokne')]],
+    [['Enter','Action'],['Right-click',label('Block / Parry','rokne / parry')]],
     [['Click',label('Attack','prahar')]]
   ];
   const faces={'✕':'cross','□':'square','○':'circle','△':'triangle'};
@@ -85,13 +85,14 @@ function wireInput(scene){
   addEventListener('keydown',e=>{
     if(['Space','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
     startBgm();   // first gesture unblocks autoplay; no-op afterwards
-    // Title → language → difficulty → player-paced cinematic.
+    // Start and input menus → language → difficulty → player-paced cinematic.
     if(state.scene==='intro'){
       if(!e.repeat)handleIntroKey(e.code);
       return;
     }
     // cutscene dialogue is player-paced — Enter steps to the next line
     if(state.scene==='cutscene'){
+      if(!e.repeat&&(e.code==='ArrowLeft'||e.code==='ArrowRight'))moveCutsceneChoice(e.code==='ArrowLeft'?'left':'right');
       if(e.code==='Enter' && !e.repeat) advanceCutscene();
       if(e.code!=='KeyR' && e.code!=='KeyM') return;
     }
@@ -107,12 +108,13 @@ function wireInput(scene){
   const releaseControls=()=>{
     for(const code in keys)keys[code]=false;
     pad.left=pad.right=false;
+    input.guardMouse=false;input.guardPad=false;
     previousPadButtons.fill(false);previousPadLeft=previousPadRight=false;
     clearQueued();
   };
   addEventListener('blur',releaseControls);
   document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseControls();});
-  // Mouse combat: Left = attack, Right = parry. Intro/menu clicks are handled separately.
+  // Mouse combat: Left = attack, Right = hold guard / time a parry.
   const cvEl = scene.game.canvas;
   cvEl.addEventListener('contextmenu', e=>e.preventDefault());   // right-click parries, no menu
   const introPoint=e=>{
@@ -126,14 +128,19 @@ function wireInput(scene){
       if(e.button===0){const p=introPoint(e);handleIntroClick(p.x,p.y);}
       return;
     }
-    if(state.scene==='cutscene' || state.scene==='credits') return;
+    if(state.scene==='cutscene'){
+      if(e.button===0){const p=introPoint(e);handleCutsceneClick(p.x,p.y);}
+      return;
+    }
+    if(state.scene==='credits')return;
     if(e.button===0) input.lightQ=true;
-    else if(e.button===2){ e.preventDefault(); input.parryQ=true; }
+    else if(e.button===2){e.preventDefault();if(!input.guardMouse)input.parryQ=true;input.guardMouse=true;}
   });
+  addEventListener('mouseup',e=>{if(e.button===2)input.guardMouse=false;});
 }
 
 // Standard Gamepad mapping uses PS button labels in the UI on every controller.
-// Movement is held; combat/menu actions are edge-triggered once per press.
+// Movement and L1 guard are held; combat/menu actions use press edges.
 const previousPadButtons=[];
 let previousPadLeft=false,previousPadRight=false,activePadIndex=null;
 function pollGamepad(){
@@ -149,7 +156,7 @@ function pollGamepad(){
     ||connected.find(p=>p.index===activePadIndex)
     ||connected[0];
   if(!controller){
-    pad.left=pad.right=false;previousPadButtons.length=0;previousPadLeft=previousPadRight=false;activePadIndex=null;return;
+    pad.left=pad.right=false;input.guardPad=false;previousPadButtons.length=0;previousPadLeft=previousPadRight=false;activePadIndex=null;return;
   }
   if(controller.index!==activePadIndex){
     activePadIndex=controller.index;previousPadButtons.length=0;previousPadLeft=previousPadRight=false;
@@ -163,6 +170,7 @@ function pollGamepad(){
 
   const cross=pressed(0),circle=pressed(1),square=pressed(2),triangle=pressed(3);
   const l1=pressed(4);
+  input.guardPad=down(4);
   const usedController=cross||circle||square||triangle||l1||leftEdge||rightEdge;
   if(usedController){
     startBgm();
@@ -174,6 +182,8 @@ function pollGamepad(){
     return;
   }
   if(state.scene==='cutscene'){
+    if(leftEdge)moveCutsceneChoice('left');
+    if(rightEdge)moveCutsceneChoice('right');
     if(cross)advanceCutscene();
     return;
   }

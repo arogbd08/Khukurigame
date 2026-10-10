@@ -1,6 +1,6 @@
-import {ctx} from '../canvas.js?v=20261002-23';
-import {W, H} from '../config.js?v=20261002-23';
-import {state} from '../state.js?v=20261002-23';
+import {ctx} from '../canvas.js?v=20261010-4';
+import {W, H} from '../config.js?v=20261010-4';
+import {state} from '../state.js?v=20261010-4';
 
 export function drawCredits(){
   const t=state.t;

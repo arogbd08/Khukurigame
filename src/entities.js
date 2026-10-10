@@ -1,10 +1,10 @@
-import {GROUND, WORLD, PLATFORM_LAYOUT, VILLAGE_COLLISION_HOUSES, STUPA_X, STUPA_SCALE, MOMO_X, DUNGEON_STEPS, DUNGEON_ALCOVES, DUNGEON_ENTRY_X, DUNGEON_FLOOR} from './config.js?v=20261002-23';
+import {GROUND, WORLD, PLATFORM_LAYOUT, VILLAGE_COLLISION_HOUSES, STUPA_X, STUPA_SCALE, MOMO_X, DUNGEON_STEPS, DUNGEON_ALCOVES, DUNGEON_ENTRY_X, DUNGEON_FLOOR} from './config.js?v=20261010-4';
 
 /* ================= ENTITIES ================= */
 // Player gets 10 HP now
 export const player={x:60,y:GROUND-58,w:28,h:58,vx:0,vy:0,onGround:false,facing:1,jumps:2,
   hp:10,maxHp:10,coins:0,ammo:3,maxAmmo:6,atk:0,throwCd:0,dodge:0,dodgeCd:0,dodgeDir:1,
-  hurt:0,parry:0,parryCd:0,charges:0,ult:0,wasOnGround:false,
+  hurt:0,parry:0,parryCd:0,charges:1,ultRecharge:0,ult:0,wasOnGround:false,
   // ---- combo system ----
   move:null,      // current move key ('L1','L2','L3','H1','HF') or null
   mv:null,        // the MOVES[...] object for the current move
@@ -19,7 +19,7 @@ export const player={x:60,y:GROUND-58,w:28,h:58,vx:0,vy:0,onGround:false,facing:
   walkPhase:0,    // advances with distance travelled; drives the leg cycle
   breathe:0,      // idle breathing oscillator
   squash:0,       // landing squash-and-stretch, decays to 0
-  parryFlash:0,   // lights up the guard on a successful deflect
+  parryFlash:0,blockFlash:0,   // parry / held-guard feedback
   throwAnim:0,    // arm follow-through after a khukuri throw
   turnLean:0,     // body leans into acceleration, smoothed
   atkLean:0};     // extra forward lean during an attack, smoothed
@@ -80,7 +80,8 @@ export const boss={x:7800,y:DUNGEON_FLOOR-112,w:72,h:112,hp:18,maxHp:18,dir:-1,s
   posture:0,maxPosture:12,stagger:0,blockFlash:0};
 export const cage={x:8240,y:DUNGEON_FLOOR-52};
 // cs.i = index of the dialogue line currently on screen (player-advanced)
-export const cs={t:0,i:0,shock:0,muna:{x:8180,y:DUNGEON_FLOOR-52},raju:{x:8460,y:DUNGEON_FLOOR-52},hari:{x:7960},rajuIn:false};
+export const cs={t:0,i:0,shock:0,muna:{x:8180,y:DUNGEON_FLOOR-52},raju:{x:8460,y:DUNGEON_FLOOR-52},hari:{x:7960},rajuIn:false,
+  rajuArrived:false,choiceActive:false,choiceFocus:0,endingChoice:null,action:'',actionT:0};
 
 export const shots=[], pthrows=[], ethrows=[], drops=[], shocks=[], healDrops=[];
 

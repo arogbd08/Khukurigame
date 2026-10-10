@@ -11,19 +11,20 @@ export const SUB_PER_CHAR   = 5;        // +5 frames (~83ms) per character
 export const SUB_MAX_FRAMES = 700;      // ~11.6s cap for non-sticky lines
 export const INTRO_LINE_FRAMES = 118;   // gap between intro story lines
 
-/* ---- parry (Nine Sols style: generous window, huge feedback) ----
-   EVERY damage source in the game is parryable: enemy lunge/leap/slam, thrown
-   knives, boss slash/leap/spin, boss projectiles, and ground shockwaves. */
-export const PARRY_DURATION = 24;   // total stance length
-export const PARRY_ACTIVE   = 8;    // deflect succeeds while parry > this  => 16 active frames (~267ms)
-export const PARRY_COOLDOWN = 16;   // short — parry is meant to be spammable-but-punishing
+/* ---- guard / timed parry ----
+   A tap creates a short deflect window; continuing to hold blocks frontal hits.
+   Deflects answer enemy attacks, boss attacks, projectiles and shockwaves. */
+export const PARRY_DURATION = 14;   // short press window; holding continues as a normal guard
+export const PARRY_ACTIVE   = 6;    // reference value; difficulty sets the exact active cutoff
+export const PARRY_COOLDOWN = 16;   // short lockout after a guard press
 export const PARRY_HITSTOP  = 13;   // freeze on a successful deflect
 export const PARRY_SHAKE    = 9;
 
 /* ---- ultimate ---- */
-// Now costs a single parry point, so its damage is toned down accordingly.
+// One charge is available at the start; spent charges return on a timed cooldown.
 export const ULT_COST = 1;
 export const ULT_MAX_CHARGES = 3;
+export const ULT_RECHARGE_FRAMES = 480; // one charge every 8 seconds of play
 export const ULT_DMG_NORMAL = 4;   // was 9
 export const ULT_DMG_HEAVY  = 3;   // was 6
 export const ULT_DMG_BOSS   = 2;   // was 3
@@ -63,8 +64,8 @@ export const DEATHBLOW_FRAMES = 24;    // player deathblow animation length
    enemySpeed scales enemy + boss movement/approach; momoHeal is momos-per-heart;
    orbHeal is HP from a heal orb. */
 export const DIFF = {
-  casual:  {label:'Casual',  maxHp:12, dmgMul:0.7, parryThresh:4,  enemySpeed:0.85, momoHeal:4, orbHeal:3},
-  warrior: {label:'Warrior', maxHp:8,  dmgMul:1.4, parryThresh:10, enemySpeed:1.15, momoHeal:6, orbHeal:2}
+  casual:  {label:'Casual',  maxHp:13, dmgMul:0.6, parryThresh:5, enemySpeed:0.82, momoHeal:4, orbHeal:4},
+  warrior: {label:'Warrior', maxHp:8,  dmgMul:1.4, parryThresh:9, enemySpeed:1.15, momoHeal:6, orbHeal:2}
 };
 
 // Mustang-style stone terrace steps and the descending entrance to the final cave.

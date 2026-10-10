@@ -435,3 +435,15 @@ No test framework. Verify with headless Edge via `puppeteer-core` (no Chromium d
 1. Added the presentation cover artwork as `assets/khukuri-title.jpg` and use it on a distinct first start screen.
 2. Added a separate Keyboard & Mouse / Controller selection screen before language and difficulty. Keyboard, mouse, and gamepad users can select their preferred mode; the below-game controls strip stays hidden until an explicit choice, then shows only that mode's mapping.
 3. Shifted page and canvas chrome toward the cover's midnight blue, teal, and muted gold palette. No automated tests or browser preview were run.
+
+## Follow-up (2026-10-10 — branching ending cutscene)
+1. Added a two-option choice after Muna says goodbye: “Let them leave” or “Punch Raju.” The options do not use the profanity.
+2. Let-them-leave branch retains Hari’s “...muji.” line and plays the couple walking away.
+3. Punch branch puts “Ko hos ta? Ma bata Muna chorne? Feri?!” in Hari’s cutscene dialogue, animates the punch, gives Raju a response, then shows Muna angrily slapping Hari and running off with Raju. Added English subtitle translations and keyboard, mouse, and controller choice input.
+4. Updated cache-busting URLs for changed modules. No browser preview or tests were run.
+
+## Follow-up (2026-10-10 — timed ultimate, guard/parry, Casual tuning)
+1. Ultimate starts with one of three charges and regenerates one charge every 480 gameplay frames (8 seconds). Parrying no longer grants ultimate charge; the HUD shows progress around the next charge pip.
+2. Right-click / controller L1 now hold a directional guard. A fresh press also opens a short timed parry window; a correctly timed deflect keeps the existing counter and posture rewards, while a held guard blocks frontal attacks (including the yak, enemy/boss attacks, projectiles, and shockwaves).
+3. Updated controls text to “Block / Parry.” Casual now has 13 HP, takes reduced damage, faces slower enemies, has a more forgiving parry window, and gets stronger healing orbs. Cache-busting URLs were unified at `20261010-4`.
+4. No browser preview or tests were run.
